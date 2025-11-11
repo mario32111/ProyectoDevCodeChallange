@@ -9,23 +9,36 @@ import time      # Para medir el tiempo de la solicitud
 # --- 1. Cargar el Modelo al Iniciar ---
 # Este código se ejecuta UNA VEZ cuando inicias el servidor, no por cada solicitud.
 
+# --- 1. Cargar el Modelo al Iniciar (Modo Dinámico) ---
+import torch
+
 print("Cargando modelo Whisper (large-v3)...")
 MODEL_SIZE = "large-v3"
-DEVICE = "cuda"
-COMPUTE_TYPE = "float16" 
+
+# --- Lógica Dinámica ---
+# Comprobar si CUDA (GPU de NVIDIA) está disponible
+if torch.cuda.is_available():
+    print("GPU (CUDA) detectada. Cargando modelo en la GPU.")
+    DEVICE = "cuda"
+    COMPUTE_TYPE = "float16" # Óptimo para GPUs modernas
+else:
+    print("Advertencia: No se detectó GPU compatible con CUDA.")
+    print("Cargando modelo en la CPU (esto será más lento).")
+    DEVICE = "cpu"
+    COMPUTE_TYPE = "int8" # 'int8' es mucho más rápido que 'default' en CPU
+# ---------------------
 
 try:
-    # Cargar el modelo en la GPU
+    # Cargar el modelo con la configuración dinámica
     model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
-    print("Modelo Whisper cargado exitosamente en la GPU.")
+    print(f"Modelo cargado exitosamente en {DEVICE} con {COMPUTE_TYPE}.")
+    
 except Exception as e:
-    print(f"Error cargando el modelo: {e}")
-    print("Advertencia: No se pudo cargar el modelo en la GPU. Revisa la configuración de CUDA/PyTorch.")
-    # Usar CPU como alternativa si falla la GPU, pero será lento
-    DEVICE = "cpu"
-    COMPUTE_TYPE = "default" 
-    model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
-    print("Modelo cargado en la CPU.")
+    print(f"Error fatal al cargar el modelo: {e}")
+    # Si falla aquí, es probable que sea un problema con los archivos del modelo
+    # o una configuración de CTranslate2 incorrecta.
+    # En este punto, la aplicación probablemente no pueda continuar.
+    exit(1) # Salir si el modelo no se puede cargar
 
 
 # --- 2. Crear la Aplicación FastAPI ---
