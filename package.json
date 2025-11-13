@@ -15,7 +15,9 @@
     "express-ws": "^5.0.2",
     "http-errors": "~1.6.3",
     "morgan": "^1.10.1",
-    "twilio": "^5.10.4"
+    "mu-law": "^0.0.1",
+    "twilio": "^5.10.4",
+    "wavefile": "^11.0.0"
   },
   "devDependencies": {
     "install": "^0.13.0",

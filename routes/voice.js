@@ -7,31 +7,39 @@ router.get('/', function (req, res, next) {
   res.send('respond with a resource');
 });
 
-router.post('/', (request, response) => {
-  // 1. (Opcional) Imprime el body
-  console.log("Datos de la llamada:", request.body);
-  const city = request.body.FromCity || "tu ubicación";
+// En tu archivo routes/voice.js
 
-  // 2. Prepara la respuesta TwiML
+router.post('/', (request, response) => {
+  const city = request.body.FromCity || "tu ubicación";
   const twiml = new VoiceResponse();
 
-  // 3. Saludo inicial
-  twiml.say({
-    voice: 'es-MX-Standard-A',
-    language: 'es-MX'
-  }, `Hola. Te has comunicado con el asistente virtual de emergencias de ${city}. Por favor, describe tu situación.`);
-
-  // 4. --- ¡AQUÍ ESTÁ LA MAGIA! ---
-  // Inicia el streaming de audio
+  // Iniciar el stream INMEDIATAMENTE para capturar todo
   const connect = twiml.connect();
   connect.stream({
-    url: 'wss://d7fbe783fc05.ngrok-free.app/stream' // <-- ¡Crítico! Debe ser 'wss://'
+    url: 'wss://tu-ngrok-url.app/stream',
+    track: 'inbound_track' // Asegura que grabamos solo al usuario (o 'both_tracks' para ambos)
   });
-  
-  // 5. (Opcional) Pausa para que el streaming se establezca
-  twiml.pause({ length: 20 }); // Pausa de 20s (puedes ajustar)
 
-  // 6. Envía la respuesta TwiML
+  // NOTA: Cuando usas <Connect><Stream>, Twilio deja de procesar los verbos <Say> siguientes
+  // hasta que el stream termine. Si quieres que el bot hable Y grabe al mismo tiempo,
+  // la arquitectura cambia (el bot debe hablar a través del WebSocket).
+  
+  // PERO, para tu caso actual (Grabar mensaje), lo ideal es:
+  // 1. El bot saluda.
+  // 2. Inicia la grabación/stream.
+  
+  // Tu código original estaba bien en orden, pero asegúrate de que el usuario sepa cuándo hablar.
+  twiml.say({
+     voice: 'es-MX-Standard-A',
+     language: 'es-MX'
+  }, `Hola. Asistente de emergencias de ${city}. Al escuchar el tono, describe tu situación.`);
+  
+  // Ahora sí conectamos el flujo de audio
+  const connect2 = twiml.connect(); 
+  connect2.stream({
+    url: 'wss://16b7ae192602.ngrok-free.app/stream'
+  });
+
   response.type('text/xml');
   response.send(twiml.toString());
 });

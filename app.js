@@ -1,6 +1,5 @@
 var createError = require('http-errors');
 var express = require('express');
-var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 
@@ -10,6 +9,84 @@ var voiceRouter = require('./routes/voice.js'); // <<< CAMBIO: Importamos tu rou
 
 var app = express();
 
+
+const fs = require('fs');
+const path = require('path');
+
+const RECORDINGS_DIR = path.join(__dirname, 'recordings');
+if (!fs.existsSync(RECORDINGS_DIR)) {
+  fs.mkdirSync(RECORDINGS_DIR);
+}
+
+/**
+ * --- TABLA DE DECODIFICACIÓN MU-LAW A PCM LINEAL ---
+ * Esta tabla convierte los bytes comprimidos de telefonía (mu-law)
+ * a audio de alta calidad de 16 bits (PCM).
+ */
+const muLawToPcmMap = new Int16Array(256);
+for (let i = 0; i < 256; i++) {
+    let input = ~i;
+    let sign = (input & 0x80) ? -1 : 1;
+    let exponent = (input >> 4) & 0x07;
+    let mantissa = input & 0x0F;
+    let sample = ((mantissa << 3) + 132) << exponent;
+    muLawToPcmMap[i] = sign * (sample - 132);
+}
+
+/**
+ * Función optimizada para guardar WAV claro
+ */
+function saveWavFile(mulawBuffer, filePath) {
+    try {
+        // 1. Convertir Mu-Law (8-bit) a PCM (16-bit)
+        // El tamaño del buffer se duplica porque pasamos de 1 byte a 2 bytes por muestra
+        const pcmBuffer = Buffer.alloc(mulawBuffer.length * 2);
+        
+        for (let i = 0; i < mulawBuffer.length; i++) {
+            // Usamos la tabla para obtener el valor de 16 bits
+            const pcmVal = muLawToPcmMap[mulawBuffer[i]];
+            // Escribimos en Little Endian (estándar WAV)
+            pcmBuffer.writeInt16LE(pcmVal, i * 2);
+        }
+
+        // 2. Crear el Encabezado WAV (Header) manualmente (44 bytes)
+        const header = Buffer.alloc(44);
+        const dataLength = pcmBuffer.length;
+        const fileSize = 36 + dataLength;
+        const sampleRate = 8000;
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const blockAlign = numChannels * (bitsPerSample / 8);
+
+        // RIFF chunk descriptor
+        header.write('RIFF', 0);
+        header.writeUInt32LE(fileSize, 4);
+        header.write('WAVE', 8);
+        // fmt sub-chunk
+        header.write('fmt ', 12);
+        header.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
+        header.writeUInt16LE(1, 20);  // AudioFormat (1 for PCM)
+        header.writeUInt16LE(numChannels, 22);
+        header.writeUInt32LE(sampleRate, 24);
+        header.writeUInt32LE(byteRate, 28);
+        header.writeUInt16LE(blockAlign, 32);
+        header.writeUInt16LE(bitsPerSample, 34);
+        // data sub-chunk
+        header.write('data', 36);
+        header.writeUInt32LE(dataLength, 40);
+
+        // 3. Unir Header + Audio PCM
+        const finalWav = Buffer.concat([header, pcmBuffer]);
+
+        // 4. Guardar
+        fs.writeFileSync(filePath, finalWav);
+        console.log(`📁 Audio CLARO guardado: ${filePath} (Tamaño: ${finalWav.length} bytes)`);
+
+    } catch (error) {
+        console.error(`❌ Error al guardar WAV:`, error);
+    }
+}
 // --- ¡NUEVO! Configura express-ws ---
 // Esto "mejora" tu app de Express para que pueda manejar WebSockets
 // Asegúrate de correr: npm install express-ws
@@ -34,40 +111,76 @@ app.use('/voice', voiceRouter); // <<< CAMBIO: Le decimos a Express que use tu r
 
 app.ws('/stream', (ws, req) => {
   console.log('¡Conexión de WebSocket /stream establecida!');
+  
+  // Búfer para acumular TODO el audio de esta llamada
+  let streamBuffer = Buffer.alloc(0);
+  
+  // Flags para saber si ya guardamos los archivos
+  let saved10s = false;
+  let saved30s = false;
+  
+  // ID de la llamada (lo obtendremos del primer mensaje)
+  let callSid = 'unknown_call';
 
-  //  'ws' es la conexión. Escuchamos por mensajes
   ws.on('message', (msg) => {
     try {
-      // 1. Recibimos el mensaje de Twilio
       const twilioMsg = JSON.parse(msg);
 
-      // 2. Filtramos por tipo de evento
       switch (twilioMsg.event) {
-        case 'connected':
-          console.log('Evento "connected": El stream de Twilio ha comenzado.');
-          break;
-        
         case 'start':
           console.log('Evento "start": La llamada ha comenzado.');
+          callSid = twilioMsg.start.callSid; // Guardamos el ID único de la llamada
           break;
 
         case 'media':
-          // 3. ¡AQUÍ ESTÁ TU AUDIO!
-          const audioChunkBase64 = twilioMsg.media.payload;
-          console.log(`Recibido chunk de audio de ${audioChunkBase64.length} bytes`);
+          // 1. Obtenemos el chunk y lo convertimos a Buffer
+          const audioChunk = Buffer.from(twilioMsg.media.payload, 'base64');
           
-          // --- AQUÍ VA TU LÓGICA DE BÚFER ---
-          // 1. Convierte de Base64 a un Buffer de audio
-          const audioBuffer = Buffer.from(audioChunkBase64, 'base64');
+          // 2. Lo añadimos al búfer acumulativo
+          streamBuffer = Buffer.concat([streamBuffer, audioChunk]);
           
-          // 2. Añádelo a tu búfer deslizante
-          //    (Esta es la lógica que implementaremos a continuación)
-          //    ej: miBufferGlobal.addChunk(audioBuffer);
+          // 3. Verificamos la duración actual
+          const currentBytes = streamBuffer.length;
           
+          // -- LÓGICA DE LOS 10 SEGUNDOS --
+          // 80,000 bytes = 10 segundos (aprox)
+          if (currentBytes >= 80000 && !saved10s) {
+            const filename = `${callSid}_10s.wav`;
+            const filePath = path.join(RECORDINGS_DIR, filename);
+            
+            // Cortamos exactamente los primeros 80,000 bytes
+            const buffer10s = streamBuffer.slice(0, 80000);
+            saveWavFile(buffer10s, filePath);
+            
+            saved10s = true;
+            console.log('✅ Clip de 10 segundos capturado y guardado.');
+            
+            // AQUÍ: Podrías llamar a tu función de IA para analizar estos 10s
+          }
+
+          // -- LÓGICA DE LOS 30 SEGUNDOS --
+          // 240,000 bytes = 30 segundos (aprox)
+          if (currentBytes >= 240000 && !saved30s) {
+            const filename = `${callSid}_30s.wav`;
+            const filePath = path.join(RECORDINGS_DIR, filename);
+            
+            // Cortamos exactamente los primeros 240,000 bytes
+            const buffer30s = streamBuffer.slice(0, 240000);
+            saveWavFile(buffer30s, filePath);
+            
+            saved30s = true;
+            console.log('✅ Clip de 30 segundos capturado y guardado.');
+            
+            // Opcional: Si no necesitas más audio después de 30s, podrías cerrar la conexión
+            // ws.close(); 
+          }
           break;
 
         case 'stop':
           console.log('Evento "stop": La llamada ha terminado.');
+          // Opcional: Guardar toda la conversación completa al final
+          // const finalPath = path.join(RECORDINGS_DIR, `${callSid}_FULL.wav`);
+          // saveWavFile(streamBuffer, finalPath);
           break;
       }
     } catch (error) {
