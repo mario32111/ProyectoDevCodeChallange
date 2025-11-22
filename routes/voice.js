@@ -13,32 +13,22 @@ router.post('/', (request, response) => {
   const city = request.body.FromCity || "tu ubicación";
   const twiml = new VoiceResponse();
 
-  // Iniciar el stream INMEDIATAMENTE para capturar todo
-  const connect = twiml.connect();
-  connect.stream({
-    url: 'wss://c59e852872c6.ngrok-free.app/stream',
-    track: 'inbound_track' // Asegura que grabamos solo al usuario (o 'both_tracks' para ambos)
-  });
-
-  // NOTA: Cuando usas <Connect><Stream>, Twilio deja de procesar los verbos <Say> siguientes
-  // hasta que el stream termine. Si quieres que el bot hable Y grabe al mismo tiempo,
-  // la arquitectura cambia (el bot debe hablar a través del WebSocket).
-  
-  // PERO, para tu caso actual (Grabar mensaje), lo ideal es:
-  // 1. El bot saluda.
-  // 2. Inicia la grabación/stream.
-  
-  // Tu código original estaba bien en orden, pero asegúrate de que el usuario sepa cuándo hablar.
+  // PASO 1: El saludo (El usuario escucha esto primero)
   twiml.say({
      voice: 'es-MX-Standard-A',
      language: 'es-MX'
   }, `Hola. Asistente de emergencias de ${city}. Al escuchar el tono, describe tu situación.`);
   
-  // Ahora sí conectamos el flujo de audio
-  const connect2 = twiml.connect(); 
-  connect2.stream({
-    url: 'wss://c59e852872c6.ngrok-free.app/stream'
+  // PASO 2: El tono (opcional, pero ayuda mucho a saber cuándo hablar)
+  // twiml.play('https://api.twilio.com/cowbell.mp3'); // Puedes buscar un 'beep' corto si quieres
+
+  // PASO 3: Conectar al Stream (Aquí empieza a grabar lo que dice el usuario)
+  const connect = twiml.connect(); 
+  connect.stream({
+    url: 'wss://c59e852872c6.ngrok-free.app/stream',
+    track: 'inbound_track' // 'inbound_track' = Solo grabamos al usuario (ahorra ancho de banda)
   });
+
   response.type('text/xml');
   response.send(twiml.toString());
 });
