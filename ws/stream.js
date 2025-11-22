@@ -1,3 +1,5 @@
+const aiService = require('./services/AiService');
+
 module.exports = (app) => {
 
     app.ws('/stream', (ws, req) => {
@@ -54,7 +56,7 @@ module.exports = (app) => {
 
                             saveWavFile(chunk10s, filePath);
                             console.log(`✅ Guardado segmento ${chunkCounter} de 10s.`);
-
+                            aiService.enviarAudio(filePath);
                             // Actualizamos punteros
                             processedBytes += CHUNK_SIZE_10S;
                             chunkCounter++;
@@ -72,6 +74,7 @@ module.exports = (app) => {
 
                             saveWavFile(chunk30s, filePath30);
                             console.log('🌟 Clip acumulado de 30 segundos guardado.');
+                            aiService.enviarAudio(filePath30);
 
                             saved30s = true; // Bloqueamos para que no se repita
                         }

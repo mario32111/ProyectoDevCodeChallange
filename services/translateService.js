@@ -8,7 +8,7 @@ class AiService {
   constructor() {
     // Inicializamos la configuración UNA sola vez
     this.baseUrl = process.env.AI_API_URL || 'https://api-de-tu-ia.com';
-    this.apiKey = process.env.AI_API_KEY; // Si la necesitas
+    //this.apiKey = process.env.AI_API_KEY; // Si la necesitas
     
     // Configuración base de Axios para no repetirla
     this.client = axios.create({
