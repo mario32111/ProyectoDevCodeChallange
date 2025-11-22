@@ -16,7 +16,7 @@ router.post('/', (request, response) => {
   // Iniciar el stream INMEDIATAMENTE para capturar todo
   const connect = twiml.connect();
   connect.stream({
-    url: 'wss://tu-ngrok-url.app/stream',
+    url: 'wss://c59e852872c6.ngrok-free.app/stream',
     track: 'inbound_track' // Asegura que grabamos solo al usuario (o 'both_tracks' para ambos)
   });
 
@@ -37,9 +37,8 @@ router.post('/', (request, response) => {
   // Ahora sí conectamos el flujo de audio
   const connect2 = twiml.connect(); 
   connect2.stream({
-    url: 'wss://16b7ae192602.ngrok-free.app/stream'
+    url: 'wss://c59e852872c6.ngrok-free.app/stream'
   });
-
   response.type('text/xml');
   response.send(twiml.toString());
 });

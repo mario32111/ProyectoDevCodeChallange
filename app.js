@@ -115,12 +115,22 @@ app.ws('/stream', (ws, req) => {
   // Búfer para acumular TODO el audio de esta llamada
   let streamBuffer = Buffer.alloc(0);
   
-  // Flags para saber si ya guardamos los archivos
-  let saved10s = false;
-  let saved30s = false;
-  
-  // ID de la llamada (lo obtendremos del primer mensaje)
+  // --- CONSTANTES ---
+  // 8000 bytes/segundo * 10 segundos = 80,000 bytes
+  const CHUNK_SIZE_10S = 80000; 
+  // 8000 bytes/segundo * 30 segundos = 240,000 bytes
+  const CHUNK_SIZE_30S = 240000;
+
+  // --- ESTADO DE LA LLAMADA ---
   let callSid = 'unknown_call';
+  
+  // Puntero para saber hasta dónde hemos guardado los clips pequeños
+  let processedBytes = 0; 
+  // Contador para nombrar los archivos (parte_1, parte_2, etc.)
+  let chunkCounter = 1;
+  
+  // Flag para asegurar que el de 30s solo se guarde una vez
+  let saved30s = false;
 
   ws.on('message', (msg) => {
     try {
@@ -129,58 +139,55 @@ app.ws('/stream', (ws, req) => {
       switch (twilioMsg.event) {
         case 'start':
           console.log('Evento "start": La llamada ha comenzado.');
-          callSid = twilioMsg.start.callSid; // Guardamos el ID único de la llamada
+          callSid = twilioMsg.start.callSid;
           break;
 
         case 'media':
-          // 1. Obtenemos el chunk y lo convertimos a Buffer
+          // 1. Añadimos el nuevo audio al búfer general
           const audioChunk = Buffer.from(twilioMsg.media.payload, 'base64');
-          
-          // 2. Lo añadimos al búfer acumulativo
           streamBuffer = Buffer.concat([streamBuffer, audioChunk]);
           
-          // 3. Verificamos la duración actual
-          const currentBytes = streamBuffer.length;
-          
-          // -- LÓGICA DE LOS 10 SEGUNDOS --
-          // 80,000 bytes = 10 segundos (aprox)
-          if (currentBytes >= 80000 && !saved10s) {
-            const filename = `${callSid}_10s.wav`;
+          // -------------------------------------------------------
+          // LÓGICA A: Generar clips de 10s INDEFINIDAMENTE
+          // -------------------------------------------------------
+          // Mientras tengamos suficiente audio "nuevo" (no procesado) para hacer 10s:
+          while ((streamBuffer.length - processedBytes) >= CHUNK_SIZE_10S) {
+            
+            // Cortamos desde donde nos quedamos la última vez hasta +10s
+            const endByte = processedBytes + CHUNK_SIZE_10S;
+            const chunk10s = streamBuffer.slice(processedBytes, endByte);
+            
+            // Nombre del archivo secuencial: callID_part_1.wav, callID_part_2.wav...
+            const filename = `${callSid}_part_${chunkCounter}.wav`;
             const filePath = path.join(RECORDINGS_DIR, filename);
             
-            // Cortamos exactamente los primeros 80,000 bytes
-            const buffer10s = streamBuffer.slice(0, 80000);
-            saveWavFile(buffer10s, filePath);
+            saveWavFile(chunk10s, filePath);
+            console.log(`✅ Guardado segmento ${chunkCounter} de 10s.`);
             
-            saved10s = true;
-            console.log('✅ Clip de 10 segundos capturado y guardado.');
-            
-            // AQUÍ: Podrías llamar a tu función de IA para analizar estos 10s
+            // Actualizamos punteros
+            processedBytes += CHUNK_SIZE_10S;
+            chunkCounter++;
           }
 
-          // -- LÓGICA DE LOS 30 SEGUNDOS --
-          // 240,000 bytes = 30 segundos (aprox)
-          if (currentBytes >= 240000 && !saved30s) {
-            const filename = `${callSid}_30s.wav`;
-            const filePath = path.join(RECORDINGS_DIR, filename);
+          // -------------------------------------------------------
+          // LÓGICA B: Guardar UN SOLO clip de los primeros 30s
+          // -------------------------------------------------------
+          if (!saved30s && streamBuffer.length >= CHUNK_SIZE_30S) {
+            // Cortamos desde el inicio (0) hasta los 30s exactos
+            const chunk30s = streamBuffer.slice(0, CHUNK_SIZE_30S);
             
-            // Cortamos exactamente los primeros 240,000 bytes
-            const buffer30s = streamBuffer.slice(0, 240000);
-            saveWavFile(buffer30s, filePath);
+            const filename30 = `${callSid}_FIRST_30s.wav`;
+            const filePath30 = path.join(RECORDINGS_DIR, filename30);
             
-            saved30s = true;
-            console.log('✅ Clip de 30 segundos capturado y guardado.');
+            saveWavFile(chunk30s, filePath30);
+            console.log('🌟 Clip acumulado de 30 segundos guardado.');
             
-            // Opcional: Si no necesitas más audio después de 30s, podrías cerrar la conexión
-            // ws.close(); 
+            saved30s = true; // Bloqueamos para que no se repita
           }
           break;
 
         case 'stop':
           console.log('Evento "stop": La llamada ha terminado.');
-          // Opcional: Guardar toda la conversación completa al final
-          // const finalPath = path.join(RECORDINGS_DIR, `${callSid}_FULL.wav`);
-          // saveWavFile(streamBuffer, finalPath);
           break;
       }
     } catch (error) {
