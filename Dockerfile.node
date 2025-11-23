@@ -1,0 +1,25 @@
+# Usamos una imagen ligera de Node 18
+FROM node:18-alpine
+
+# Establecemos el directorio de trabajo dentro del contenedor
+WORKDIR /app
+
+# 1. Instalamos dependencias
+# Copiamos primero package.json para aprovechar la caché de Docker
+COPY package*.json ./
+RUN npm install
+
+# 2. Copiamos el resto del código fuente de la aplicación Node.js
+COPY app.js .
+COPY bin ./bin
+COPY public ./public
+COPY routes ./routes
+COPY services ./services
+COPY views ./views
+COPY ws ./ws
+
+# Exponemos el puerto que usa tu app.js (usualmente 3000 o el que definas)
+EXPOSE 3000
+
+# Comando de inicio
+CMD ["npm", "start"]

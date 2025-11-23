@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # --- SERVICIO 1: BACKEND NODE (Twilio) ---
+  backend-node:
+    container_name: backend-node
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    # Mapeo de puertos: Host 3000 -> Contenedor 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      # MAGIA: Mapeamos la carpeta local 'recordings' a la del contenedor
+      # Node escribe aquí...
+      - ./recordings:/app/recordings
+      # (Opcional) Ignora node_modules local para usar el del contenedor
+      - /app/node_modules
+    environment:
+      # Node le hablará a Python usando el nombre del servicio 'ai-service'
+      - AI_API_URL=http://ai-service:5000
+      - PORT=3000
+    depends_on:
+      - ai-service
+    networks:
+      - app-network
+
+  # --- SERVICIO 2: IA SERVER (Python) ---
+  ai-service:
+    container_name: ai-service
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    ports:
+      - "5000:5000"
+    volumes:
+      # ...y Python lee de aquí INSTANTÁNEAMENTE.
+      - ./recordings:/app/IAServer/recordings
+    environment:
+      # Variables para optimizar PyTorch en Docker
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+    networks:
+      - app-network
+    
+# --- CONFIGURACIÓN DE GPU (NVIDIA) ---
+    # COMENTAMOS ESTO PARA USAR MODO CPU POR AHORA
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+# Red interna para que se comuniquen
+networks:
+  app-network:
+    driver: bridge

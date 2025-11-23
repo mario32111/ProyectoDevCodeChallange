@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+recordings
+.wav
+.git
+.gitignore
+venv
+pycache
+IAServer/pycache
+.env

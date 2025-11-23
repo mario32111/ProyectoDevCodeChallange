@@ -1,0 +1,30 @@
+# Usamos Python 3.10 slim para mantener el tamaño controlado pero funcional
+FROM python:3.10-slim
+
+# Establecemos el directorio de trabajo
+WORKDIR /app
+
+# 1. Instalamos dependencias del SISTEMA (Crítico para Audio)
+# libsndfile1: Necesario para que librosa lea wavs
+# ffmpeg: Necesario para que whisper procese audios
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Instalamos dependencias de PYTHON
+# Asumimos que requirements.txt está en la raíz de tu proyecto
+COPY requirements.txt .
+# --no-cache-dir ayuda a no guardar temporales gigantes de PyTorch
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 3. Copiamos el código fuente
+# Copiamos el código fuente de la aplicación de IA
+COPY IAServer/ ./IAServer
+WORKDIR /app/IAServer
+
+# Exponemos el puerto de FastAPI
+EXPOSE 5000
+
+# Comando de inicio apuntando al nuevo main.py modular
+CMD ["python", "main.py"]
