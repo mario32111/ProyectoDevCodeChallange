@@ -34,7 +34,7 @@ class AiService {
 
       // Usamos la instancia pre-configurada de axios
       // Nota: getHeaders() es necesario cuando usas form-data manual en Node
-      const response = await this.client.post('/analizar', form, {
+      const response = await this.client.post('/trans', form, {
         headers: {
           ...form.getHeaders() 
         }

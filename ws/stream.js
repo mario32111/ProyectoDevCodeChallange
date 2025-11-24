@@ -1,4 +1,4 @@
-const aiService = require('./services/AiService');
+const aiService = require('../services/translateService');
 
 module.exports = (app) => {
 
