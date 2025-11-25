@@ -1,5 +1,5 @@
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, Query, HTTPException
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Form
 from faster_whisper import WhisperModel
 from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 import torch
@@ -10,6 +10,7 @@ import shutil
 import os
 import time
 import uuid
+
 
 # ==========================================
 # CONFIGURACIÓN E INICIALIZACIÓN DE MODELOS
@@ -185,22 +186,6 @@ def predict_emotion_endpoint(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=f"Error en detección de emociones: {str(e)}")
-    
-    finally:
-        # Limpieza
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except PermissionError:
-                pass # A veces Windows bloquea el archivo brevemente
-
-
-# ==========================================
-# EJECUCIÓN
-# ==========================================
-if __name__ == "__main__":
-    print("🚀 Iniciando servidor unificado en http://0.0.0.0:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
     
     finally:
         # Limpieza
