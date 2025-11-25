@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Form
 from faster_whisper import WhisperModel
+# IMPORTANTE: Usamos AutoFeatureExtractor, NO AutoProcessor
 from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 import torch
 import librosa
@@ -10,7 +11,6 @@ import shutil
 import os
 import time
 import uuid
-
 
 # ==========================================
 # CONFIGURACIÓN E INICIALIZACIÓN DE MODELOS
@@ -24,10 +24,8 @@ print(f"Dispositivo detectado: {device_str}")
 
 # --- CARGA DEL MODELO 1: WHISPER (Transcripción) ---
 print("\n[1/2] Cargando modelo Whisper (large-v3)...")
-#WHISPER_MODEL_SIZE = "small"
 WHISPER_MODEL_SIZE = "base"
-#WHISPER_COMPUTE_TYPE = "float16" if device_str == "cuda" else "int8"
-WHISPER_COMPUTE_TYPE = "int8" # Siempre int8 en CPU para velocidad
+WHISPER_COMPUTE_TYPE = "int8" 
 
 try:
     whisper_model = WhisperModel(WHISPER_MODEL_SIZE, device=device_str, compute_type=WHISPER_COMPUTE_TYPE)
@@ -38,13 +36,17 @@ except Exception as e:
 
 # --- CARGA DEL MODELO 2: EMOCIONES (HuggingFace) ---
 print("\n[2/2] Cargando modelo de Emociones...")
-EMOTION_MODEL_ID = "firdhokk/speech-emotion-recognition-with-openai-whisper-large-v3"
+EMOTION_MODEL_ID = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
 
 try:
+    # 1. Cargar el Modelo
     emotion_model = AutoModelForAudioClassification.from_pretrained(EMOTION_MODEL_ID)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(EMOTION_MODEL_ID, do_normalize=True)
     
-    # Mapeo de IDs a etiquetas (ej: 0 -> enojo)
+    # 2. CORRECCIÓN: Usar AutoFeatureExtractor en lugar de AutoProcessor
+    # Esto evita que busque un tokenizer que no existe y cause el error NoneType
+    feature_extractor = AutoFeatureExtractor.from_pretrained(EMOTION_MODEL_ID)
+    
+    # Mapeo de IDs a etiquetas
     id2label = emotion_model.config.id2label
     
     # Mover a GPU si es posible
@@ -62,27 +64,31 @@ except Exception as e:
 # ==========================================
 
 def preprocess_emotion_audio(audio_path, extractor, max_duration=30.0):
-    """Preprocesa el audio para el modelo de emociones usando librosa."""
-    audio_array, sampling_rate = librosa.load(audio_path, sr=None)
+    """Preprocesa el audio para el modelo de emociones usando librosa a 16kHz."""
+    # Wav2Vec2 requiere 16kHz OBLIGATORIAMENTE
+    TARGET_SR = 16000
+    audio_array, sampling_rate = librosa.load(audio_path, sr=TARGET_SR)
     
-    max_length = int(extractor.sampling_rate * max_duration)
+    # Recorte manual para seguridad
+    max_length = int(TARGET_SR * max_duration)
     if len(audio_array) > max_length:
         audio_array = audio_array[:max_length]
-    else:
-        audio_array = np.pad(audio_array, (0, max_length - len(audio_array)))
-
+    
+    # Usamos el feature_extractor (no processor)
     inputs = extractor(
         audio_array,
-        sampling_rate=extractor.sampling_rate,
-        max_length=max_length,
-        truncation=True,
+        sampling_rate=TARGET_SR,
         return_tensors="pt",
+        padding=True,      # Rellena si es corto
+        max_length=max_length,
+        truncation=True    # Corta si es largo (seguridad extra)
     )
     return inputs
 
 def get_emotion_prediction(audio_path):
     """Ejecuta la inferencia del modelo de emociones."""
     inputs = preprocess_emotion_audio(audio_path, feature_extractor)
+    
     # Mover inputs al dispositivo correcto
     inputs = {key: value.to(emotion_device) for key, value in inputs.items()}
 
@@ -91,7 +97,11 @@ def get_emotion_prediction(audio_path):
 
     logits = outputs.logits
     predicted_id = torch.argmax(logits, dim=-1).item()
-    return id2label[predicted_id]
+    
+    # Si id2label falla (a veces pasa en modelos viejos), usamos fallback numérico
+    if id2label:
+        return id2label[predicted_id]
+    return str(predicted_id)
 
 
 # ==========================================
@@ -105,8 +115,8 @@ def read_root():
     return {
         "estado": "Activo",
         "modelos": {
-            "transcripcion": "Whisper large-v3",
-            "emociones": "Speech Emotion Recognition"
+            "transcripcion": f"Whisper {WHISPER_MODEL_SIZE}",
+            "emociones": "Wav2Vec2-XLSR (ehcalabres)"
         },
         "dispositivo": device_str
     }
@@ -115,7 +125,7 @@ def read_root():
 @app.post("/trans")
 def transcribe_audio(
     file: UploadFile = File(...),
-    language: str = Query(None, description="Código de idioma (ej. 'es') o None para autodetectar."),
+    language: str = Query(None, description="Código de idioma (ej. 'es')."),
     prompt: str = Form(None, description="Contexto previo del chat"),
     task: str = Query("transcribe", enum=["transcribe", "translate"])
 ):
@@ -123,13 +133,11 @@ def transcribe_audio(
     temp_file_path = None
 
     try:
-        # Crear archivo temporal seguro
         suffix = os.path.splitext(file.filename)[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             shutil.copyfileobj(file.file, temp_file)
             temp_file_path = temp_file.name
 
-        # Transcribir
         segments, info = whisper_model.transcribe(
             temp_file_path,
             beam_size=1,
@@ -153,9 +161,9 @@ def transcribe_audio(
         raise HTTPException(status_code=500, detail=f"Error en transcripción: {str(e)}")
 
     finally:
-        # Limpieza
         if temp_file_path and os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+            try: os.remove(temp_file_path)
+            except: pass
 
 
 # --- ENDPOINT 2: EMOCIONES ---
@@ -164,23 +172,25 @@ def predict_emotion_endpoint(file: UploadFile = File(...)):
     temp_file_path = None
     
     try:
-        # Usar UUID para evitar colisiones y guardar en carpeta temporal del sistema
         file_extension = os.path.splitext(file.filename)[1]
         temp_filename = f"{uuid.uuid4()}{file_extension}"
         temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
 
-        # Guardar archivo
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Predecir
         print(f"Analizando emoción en: {temp_file_path}")
+        start_time = time.time()
+        
         emotion = get_emotion_prediction(temp_file_path)
         
+        end_time = time.time()
+
         return {
             "servicio": "emociones",
             "archivo": file.filename,
-            "emocion_detectada": emotion
+            "emocion_detectada": emotion,
+            "tiempo_procesamiento": round(end_time - start_time, 2)
         }
 
     except Exception as e:
@@ -188,13 +198,11 @@ def predict_emotion_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error en detección de emociones: {str(e)}")
     
     finally:
-        # Limpieza
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
             except PermissionError:
-                pass # A veces Windows bloquea el archivo brevemente
-
+                pass
 
 # ==========================================
 # EJECUCIÓN
