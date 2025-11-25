@@ -33,60 +33,6 @@ for (let i = 0; i < 256; i++) {
     muLawToPcmMap[i] = sign * (sample - 132);
 }
 
-/**
- * Función optimizada para guardar WAV claro
- */
-function saveWavFile(mulawBuffer, filePath) {
-    try {
-        // 1. Convertir Mu-Law (8-bit) a PCM (16-bit)
-        // El tamaño del buffer se duplica porque pasamos de 1 byte a 2 bytes por muestra
-        const pcmBuffer = Buffer.alloc(mulawBuffer.length * 2);
-        
-        for (let i = 0; i < mulawBuffer.length; i++) {
-            // Usamos la tabla para obtener el valor de 16 bits
-            const pcmVal = muLawToPcmMap[mulawBuffer[i]];
-            // Escribimos en Little Endian (estándar WAV)
-            pcmBuffer.writeInt16LE(pcmVal, i * 2);
-        }
-
-        // 2. Crear el Encabezado WAV (Header) manualmente (44 bytes)
-        const header = Buffer.alloc(44);
-        const dataLength = pcmBuffer.length;
-        const fileSize = 36 + dataLength;
-        const sampleRate = 8000;
-        const numChannels = 1;
-        const bitsPerSample = 16;
-        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-        const blockAlign = numChannels * (bitsPerSample / 8);
-
-        // RIFF chunk descriptor
-        header.write('RIFF', 0);
-        header.writeUInt32LE(fileSize, 4);
-        header.write('WAVE', 8);
-        // fmt sub-chunk
-        header.write('fmt ', 12);
-        header.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
-        header.writeUInt16LE(1, 20);  // AudioFormat (1 for PCM)
-        header.writeUInt16LE(numChannels, 22);
-        header.writeUInt32LE(sampleRate, 24);
-        header.writeUInt32LE(byteRate, 28);
-        header.writeUInt16LE(blockAlign, 32);
-        header.writeUInt16LE(bitsPerSample, 34);
-        // data sub-chunk
-        header.write('data', 36);
-        header.writeUInt32LE(dataLength, 40);
-
-        // 3. Unir Header + Audio PCM
-        const finalWav = Buffer.concat([header, pcmBuffer]);
-
-        // 4. Guardar
-        fs.writeFileSync(filePath, finalWav);
-        console.log(`📁 Audio CLARO guardado: ${filePath} (Tamaño: ${finalWav.length} bytes)`);
-
-    } catch (error) {
-        console.error(`❌ Error al guardar WAV:`, error);
-    }
-}
 // --- ¡NUEVO! Configura express-ws ---
 // Esto "mejora" tu app de Express para que pueda manejar WebSockets
 // Asegúrate de correr: npm install express-ws

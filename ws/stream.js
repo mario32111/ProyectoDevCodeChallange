@@ -1,5 +1,5 @@
 const path = require('path');
-const aiService = require('../services/translateService');
+const transcribeService = require('../services/transcribeService');
 const { saveWavFile, RECORDINGS_DIR } = require('../services/audioService');
 
 module.exports = (app) => {
@@ -58,7 +58,7 @@ module.exports = (app) => {
 
                             saveWavFile(chunk10s, filePath);
                             console.log(`✅ Guardado segmento ${chunkCounter} de 10s.`);
-                            aiService.enviarAudio(filePath);
+                            transcribeService.enviarAudio(filePath);
                             // Actualizamos punteros
                             processedBytes += CHUNK_SIZE_10S;
                             chunkCounter++;
@@ -78,7 +78,7 @@ module.exports = (app) => {
                             console.log('🌟 Clip acumulado de 30 segundos guardado.');
                             // Enviamos el de 30s SIN contexto y SIN actualizar el contexto
                             // para evitar duplicados y alucinaciones
-                            aiService.enviarAudio(filePath30, { useContext: false, updateContext: false });
+                            transcribeService.enviarAudio(filePath30, { useContext: false, updateContext: false });
 
                             saved30s = true; // Bloqueamos para que no se repita
                         }

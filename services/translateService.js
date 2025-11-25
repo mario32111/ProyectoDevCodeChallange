@@ -3,7 +3,7 @@ const fs = require('fs');
 const FormData = require('form-data');
 require('dotenv').config(); // Asumiendo que usas variables de entorno
 
-class AiService {
+class transcribeService {
 
   constructor() {
     // Inicializamos la configuración UNA sola vez
@@ -76,4 +76,4 @@ class AiService {
 // --- TRUCO PRO ---
 // Exportamos "new AiService()" para que actúe como Singleton.
 // Así, todos los archivos que hagan require de esto compartirán la misma instancia.
-module.exports = new AiService();
+module.exports = new transcribeService();
