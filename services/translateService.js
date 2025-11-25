@@ -1,15 +1,14 @@
 const axios = require('axios');
 const fs = require('fs');
 const FormData = require('form-data');
-require('dotenv').config(); // Asumiendo que usas variables de entorno
+const config = require('../config');
 
 class transcribeService {
 
   constructor() {
     // Inicializamos la configuración UNA sola vez
-    //this.baseUrl = process.env.AI_API_URL || 'http://127.0.0.1:8000';
-    //this.apiKey = process.env.AI_API_KEY; // Si la necesitas
-    this.baseUrl = 'http://localhost:8000';
+    this.baseUrl = config.aiApiUrl;
+    // this.apiKey = config.aiApiKey; // Si la necesitas
     // Configuración base de Axios para no repetirla
     this.client = axios.create({
       baseURL: this.baseUrl,
