@@ -4,43 +4,56 @@ const FormData = require('form-data');
 require('dotenv').config(); // Asumiendo que usas variables de entorno
 
 class AiService {
-  
+
   constructor() {
     // Inicializamos la configuración UNA sola vez
-    this.baseUrl = process.env.AI_API_URL || 'https://api-de-tu-ia.com';
+    //this.baseUrl = process.env.AI_API_URL || 'http://127.0.0.1:8000';
     //this.apiKey = process.env.AI_API_KEY; // Si la necesitas
-    
+    this.baseUrl = 'http://localhost:8000';
     // Configuración base de Axios para no repetirla
     this.client = axios.create({
       baseURL: this.baseUrl,
-      timeout: 10000, // 10 segundos máximo de espera
+      timeout: 20000, // 20 segundos máximo de espera
     });
+
+    this.context = '';
   }
 
   /**
    * Envía un archivo de audio a la API externa
    * @param {string} filePath - Ruta del archivo .wav
+   * @param {Object} options - Opciones de contexto { useContext: boolean, updateContext: boolean }
    * @returns {Promise<Object>} Respuesta de la API
    */
-  async enviarAudio(filePath) {
+  async enviarAudio(filePath, options = {}) {
+    const { useContext = true, updateContext = true } = options;
+
     try {
       const form = new FormData();
       form.append('file', fs.createReadStream(filePath));
-      
-      // Si necesitas enviar metadatos adicionales
-      form.append('context', 'emergencia_911');
 
-      console.log(`🚀 [AiService] Enviando: ${filePath}`);
+      // Si necesitas enviar metadatos adicionales
+      // Solo enviamos el contexto si useContext es true
+      const promptToSend = useContext ? (this.context || '') : '';
+      form.append('prompt', promptToSend);
+
+      console.log(`🚀 [AiService] Enviando: ${filePath} | Contexto: ${useContext ? 'SI' : 'NO'}`);
 
       // Usamos la instancia pre-configurada de axios
       // Nota: getHeaders() es necesario cuando usas form-data manual en Node
-      const response = await this.client.post('/trans', form, {
+      const response = await this.client.post('/trans?language=es', form, {
         headers: {
-          ...form.getHeaders() 
+          ...form.getHeaders()
         }
       });
 
       console.log('🤖 [AiService] Respuesta:', response.data);
+
+      // Solo actualizamos el contexto si updateContext es true
+      if (updateContext) {
+        this.context += " " + response.data.texto;
+      }
+
       return response.data;
 
     } catch (error) {
@@ -53,6 +66,10 @@ class AiService {
       // Opcional: Podrías guardar el error en un log o base de datos
       return null;
     }
+  }
+
+  async resetContext() {
+    this.context = '';
   }
 }
 

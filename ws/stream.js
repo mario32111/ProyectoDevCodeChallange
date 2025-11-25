@@ -1,4 +1,6 @@
+const path = require('path');
 const aiService = require('../services/translateService');
+const { saveWavFile, RECORDINGS_DIR } = require('../services/audioService');
 
 module.exports = (app) => {
 
@@ -74,7 +76,9 @@ module.exports = (app) => {
 
                             saveWavFile(chunk30s, filePath30);
                             console.log('🌟 Clip acumulado de 30 segundos guardado.');
-                            aiService.enviarAudio(filePath30);
+                            // Enviamos el de 30s SIN contexto y SIN actualizar el contexto
+                            // para evitar duplicados y alucinaciones
+                            aiService.enviarAudio(filePath30, { useContext: false, updateContext: false });
 
                             saved30s = true; // Bloqueamos para que no se repita
                         }
@@ -82,6 +86,7 @@ module.exports = (app) => {
 
                     case 'stop':
                         console.log('Evento "stop": La llamada ha terminado.');
+                        aiService.resetContext();
                         break;
                 }
             } catch (error) {

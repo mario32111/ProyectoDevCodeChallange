@@ -23,8 +23,10 @@ print(f"Dispositivo detectado: {device_str}")
 
 # --- CARGA DEL MODELO 1: WHISPER (Transcripción) ---
 print("\n[1/2] Cargando modelo Whisper (large-v3)...")
-WHISPER_MODEL_SIZE = "large-v3"
-WHISPER_COMPUTE_TYPE = "float16" if device_str == "cuda" else "int8"
+#WHISPER_MODEL_SIZE = "small"
+WHISPER_MODEL_SIZE = "base"
+#WHISPER_COMPUTE_TYPE = "float16" if device_str == "cuda" else "int8"
+WHISPER_COMPUTE_TYPE = "int8" # Siempre int8 en CPU para velocidad
 
 try:
     whisper_model = WhisperModel(WHISPER_MODEL_SIZE, device=device_str, compute_type=WHISPER_COMPUTE_TYPE)
@@ -109,10 +111,11 @@ def read_root():
     }
 
 # --- ENDPOINT 1: TRANSCRIPCIÓN ---
-@app.post("/trans/")
+@app.post("/trans")
 def transcribe_audio(
     file: UploadFile = File(...),
     language: str = Query(None, description="Código de idioma (ej. 'es') o None para autodetectar."),
+    prompt: str = Form(None, description="Contexto previo del chat"),
     task: str = Query("transcribe", enum=["transcribe", "translate"])
 ):
     start_time = time.time()
@@ -130,7 +133,8 @@ def transcribe_audio(
             temp_file_path,
             beam_size=1,
             language=language,
-            task=task
+            task=task,
+            initial_prompt=prompt
         )
 
         full_text = " ".join([seg.text for seg in segments]).strip()
@@ -154,7 +158,7 @@ def transcribe_audio(
 
 
 # --- ENDPOINT 2: EMOCIONES ---
-@app.post("/emotion/")
+@app.post("/emotion")
 def predict_emotion_endpoint(file: UploadFile = File(...)):
     temp_file_path = None
     
@@ -195,5 +199,21 @@ def predict_emotion_endpoint(file: UploadFile = File(...)):
 # EJECUCIÓN
 # ==========================================
 if __name__ == "__main__":
-    print("🚀 Iniciando servidor unificado en http://127.0.0.1:8000")
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    print("🚀 Iniciando servidor unificado en http://0.0.0.0:8000")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    finally:
+        # Limpieza
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except PermissionError:
+                pass # A veces Windows bloquea el archivo brevemente
+
+
+# ==========================================
+# EJECUCIÓN
+# ==========================================
+if __name__ == "__main__":
+    print("🚀 Iniciando servidor unificado en http://0.0.0.0:8000")
+    uvicorn.run(app, host="0.0.0.0", port=8000)

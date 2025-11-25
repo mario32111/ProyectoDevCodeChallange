@@ -25,7 +25,7 @@ router.post('/', (request, response) => {
   // PASO 3: Conectar al Stream (Aquí empieza a grabar lo que dice el usuario)
   const connect = twiml.connect(); 
   connect.stream({
-    url: 'wss://b16722957fdf.ngrok-free.app/stream',
+    url: 'wss://3e198162bbe2.ngrok-free.app/stream',
     track: 'inbound_track' // 'inbound_track' = Solo grabamos al usuario (ahorra ancho de banda)
   });
 
