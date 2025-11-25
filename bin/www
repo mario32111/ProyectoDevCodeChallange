@@ -8,6 +8,7 @@ var app = require('../app');
 var debug = require('debug')('proyectodevcodechallange:server');
 var http = require('http');
 var config = require('../config');
+var updateTwilioWebhook = require('../config/twilio');
 
 /**
  * Get port from environment and store in Express.
@@ -33,6 +34,7 @@ app.set('port', port);
 // En su lugar, usamos app.listen(), que express-ws ha "mejorado"
 // para que funcione tanto para HTTP como para WebSockets.
 const server = app.listen(port, () => {
+  updateTwilioWebhook();
   console.log(`Servidor escuchando en el puerto ${port}`);
 });
 server.on('error', onError);
