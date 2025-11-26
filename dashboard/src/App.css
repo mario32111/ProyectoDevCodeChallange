@@ -1,0 +1,213 @@
+:root {
+  /* --- PALETA CLARA Y LIMPIA (Idéntica a tu diseño) --- */
+  --bg-color: #f1f5f9;       /* Gris muy suave de fondo */
+  --card-bg: #ffffff;        /* Blanco puro */
+  
+  /* Textos */
+  --text-primary: #1e293b;   /* Azul oscuro casi negro (profesional) */
+  --text-secondary: #64748b; /* Gris medio */
+  
+  /* Colores de Prioridad (Vibrantes pero legibles) */
+  --color-bajo: #22c55e;
+  --color-medio: #eab308;
+  --color-alto: #f97316;
+  --color-maximo: #ef4444;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* --- Header "Glass" (Vidrio elegante) --- */
+.header {
+  background: rgba(255, 255, 255, 0.85); /* Blanco translúcido */
+  backdrop-filter: blur(8px);            /* Efecto borroso detrás */
+  -webkit-backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  
+  padding: 1rem 2rem;
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); /* Sombra muy suave */
+  border-bottom: 1px solid white;
+  
+  display: flex;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: #0f172a;
+  margin-right: 4rem;
+}
+
+.nav-buttons button {
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-right: 2rem;
+  cursor: pointer;
+  padding-bottom: 4px;
+  transition: color 0.2s;
+}
+
+.nav-buttons button:hover { color: #2563eb; }
+
+.nav-buttons button.active {
+  color: #2563eb;
+  border-bottom: 2px solid #2563eb;
+}
+
+/* --- Tarjetas Principales (Contenedores) --- */
+.card {
+  background: var(--card-bg);
+  border-radius: 16px; /* Bordes más redondos = más moderno */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e2e8f0; /* Borde sutil */
+}
+
+.title {
+  color: #1e3a8a; /* Azul corporativo */
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 1.5rem;
+}
+
+.left-panel { display: flex; flex-direction: column; gap: 2rem; }
+
+/* --- Kanban (Columnas) --- */
+.columns-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.kanban-col { display: flex; flex-direction: column; }
+
+.column-header {
+  padding: 0.6rem;
+  color: white;
+  font-weight: bold;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  border-radius: 10px 10px 0 0; /* Redondeado arriba */
+  text-align: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.column-body {
+  background-color: #f8fafc; /* Gris muy claro adentro */
+  min-height: 220px;
+  padding: 0.8rem;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  border-radius: 0 0 10px 10px; /* Redondeado abajo */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* --- TARJETAS INTERACTIVAS (Items) --- */
+.task-card {
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Sombra sutil */
+  border-left: 4px solid #cbd5e1;
+  
+  cursor: grab;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid #f1f5f9;
+}
+
+/* INTERACCIÓN: Al pasar el mouse */
+.task-card:hover {
+  transform: translateY(-4px); /* Se levanta */
+  box-shadow: 0 10px 20px rgba(0,0,0,0.1); /* Sombra crece */
+  z-index: 10;
+}
+
+.task-card:active { cursor: grabbing; transform: scale(0.98); }
+
+.task-card p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #334155;
+  font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* Colores de borde */
+.border-bajo { border-left-color: var(--color-bajo) !important; }
+.border-medio { border-left-color: var(--color-medio) !important; }
+.border-alto { border-left-color: var(--color-alto) !important; }
+.border-maximo { border-left-color: var(--color-maximo) !important; }
+
+/* --- Gráficas --- */
+.chart-container {
+  display: flex; align-items: center; justify-content: center;
+  height: 200px; position: relative;
+}
+.pie-chart { width: 150px; height: 150px; border-radius: 50%; }
+.donut-hole {
+  width: 60%; height: 60%;
+  background-color: var(--card-bg);
+  border-radius: 50%; position: absolute;
+}
+.legend {
+  font-size: 0.8rem; color: var(--text-secondary);
+  display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem;
+}
+.legend-item { display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* --- Inputs --- */
+input[type="text"] {
+  background: #f8fafc; border: 1px solid #cbd5e1;
+  border-radius: 20px; padding: 6px 15px; outline: none; color: #334155;
+}
+input[type="text"]:focus {
+  border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* --- Animación de Entrada --- */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dashboard-grid, .header {
+  animation: slideUp 0.6s ease-out forwards;
+}
+.card {
+  opacity: 0;
+  animation: slideUp 0.6s ease-out forwards;
+  animation-delay: 0.1s;
+}
