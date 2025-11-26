@@ -6,7 +6,7 @@ var logger = require('morgan');
 var indexRouter = require('./routes/index.js');
 var usersRouter = require('./routes/users.js');
 var voiceRouter = require('./routes/voice.js'); // <<< CAMBIO: Importamos tu router de /voice
-
+var chatRouter = require('./routes/chat.js');
 var app = express();
 
 
@@ -25,12 +25,12 @@ if (!fs.existsSync(RECORDINGS_DIR)) {
  */
 const muLawToPcmMap = new Int16Array(256);
 for (let i = 0; i < 256; i++) {
-    let input = ~i;
-    let sign = (input & 0x80) ? -1 : 1;
-    let exponent = (input >> 4) & 0x07;
-    let mantissa = input & 0x0F;
-    let sample = ((mantissa << 3) + 132) << exponent;
-    muLawToPcmMap[i] = sign * (sample - 132);
+  let input = ~i;
+  let sign = (input & 0x80) ? -1 : 1;
+  let exponent = (input >> 4) & 0x07;
+  let mantissa = input & 0x0F;
+  let sample = ((mantissa << 3) + 132) << exponent;
+  muLawToPcmMap[i] = sign * (sample - 132);
 }
 
 // --- ¡NUEVO! Configura express-ws ---
@@ -38,6 +38,9 @@ for (let i = 0; i < 256; i++) {
 // Asegúrate de correr: npm install express-ws
 var expressWs = require('express-ws')(app);
 // ----------------------------------------
+
+// Inicializamos el WebSocket
+require('./ws/stream')(app);
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -53,20 +56,19 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
 app.use('/voice', voiceRouter); // <<< CAMBIO: Le decimos a Express que use tu router en la ruta /voice
+app.use('/chat', chatRouter);
 
-
-require('./ws/stream')(app);
 
 // ----------------------------------------
 
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
   next(createError(404));
 });
 
 // error handler
-app.use(function(err, req, res, next) {
+app.use(function (err, req, res, next) {
   // set locals, only providing error in development
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};

@@ -5,33 +5,34 @@ var router = express.Router();
 
 /* GET users listing. */
 router.post('/', (req, res) => {
-    
+
     // Deserialización automática de JSON
-    const { messages, socketId } = req.body;
-    const io = req.io; // Obtenemos 'io' del middleware
+    const { messages } = req.body;
+    const ws = req.ws; // Obtenemos 'io' del middleware (si existe)
+    const iaService = require('../services/openAIService');
 
-    if (!messages || !socketId) {
-        // Error de parámetros
-        return res.status(400).json({ error: 'Faltan "messages" o "socketId"' });
-    }
-
-    // 1. Iniciar el trabajo (SIN AWAIT)
-    // Esto maneja la concurrencia, Node no se bloquea
-    aiService.streamingCompletion(messages, io, socketId)
-        .catch(err => {
-            // Manejo de Error Remoto: Si falla, avisar por el socket
-            console.error('[Error de Inicio] Fallo al iniciar el stream:', err);
-            io.to(socketId).emit('remote_error', { 
-                message: 'Error al iniciar el servicio de IA.', 
-                details: err.message 
+    if (ws) {
+        // 1. Iniciar el trabajo (SIN AWAIT)
+        iaService.streamingCompletion(messages, ws)
+            .catch(err => {
+                console.error('[Error de Inicio] Fallo al iniciar el stream:', err);
+                ws.emit('remote_error', {
+                    message: 'Error al iniciar el servicio de IA.',
+                    details: err.message
+                });
             });
-        });
 
-    // 2. Responder INMEDIATAMENTE
-    // Serialización automática de la respuesta JSON
-    res.status(202).json({ 
-        status: 'Job accepted', 
-        message: `Procesando... callback se enviará a ${socketId}` 
-    });
+        res.status(202).json({
+            status: 'Job accepted',
+            message: `Procesando...`
+        });
+    } else {
+        // Si no hay socket (ej: llamada HTTP normal), podríamos esperar la respuesta o devolver error.
+        // Por ahora, devolvemos un mensaje indicando que no se soporta streaming por HTTP directo sin socket.
+        res.status(400).json({
+            status: 'Error',
+            message: 'Este endpoint requiere una conexión WebSocket activa inyectada en req.ws'
+        });
+    }
 });
 module.exports = router;
