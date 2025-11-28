@@ -40,9 +40,11 @@ module.exports = (app) => {
                             processedBytes += CHUNK_SIZE_10S;
                             chunkCounter++;
 
-                            const response = await transcribeService.enviarAudio(filePath);
-                            const messages = [{ role: 'user', content: response.texto }];
-                            iaService.streamingCompletion(messages, ws);
+                            const transcribeResponse = await transcribeService.enviarAudio(filePath);
+                            //const emotionResponse = await emotionService.enviarAudio(filePath);
+                            const messages = [{ role: 'user', content: transcribeResponse.texto }];
+                            const emotions = [{ role: 'user', content: 'sad' }];
+                            iaService.streamingCompletion(messages, emotions, ws);
                         }
                         if (!saved30s && streamBuffer.length >= CHUNK_SIZE_30S) {
                             // Marcamos como guardado ANTES del await
@@ -53,9 +55,10 @@ module.exports = (app) => {
                             const filePath30 = path.join(RECORDINGS_DIR, filename30);
                             saveWavFile(chunk30s, filePath30);
                             console.log('🌟 Clip acumulado de 30 segundos guardado.');
-                            const response = await transcribeService.enviarAudio(filePath30, { useContext: false, updateContext: false });
+ /*                            const response = await transcribeService.enviarAudio(filePath30, { useContext: false, updateContext: false });
                             const messages = [{ role: 'user', content: response.texto }];
-                            iaService.streamingCompletion(messages, ws);
+                            const emotions = [{ role: 'user', content: 'sad' }];
+                            iaService.streamingCompletion(messages, emotions, ws); */
                         }
                         break;
                     case 'stop':
