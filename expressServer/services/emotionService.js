@@ -12,47 +12,38 @@ class emotionService {
     // Configuración base de Axios para no repetirla
     this.client = axios.create({
       baseURL: this.baseUrl,
-      timeout: 20000, // 20 segundos máximo de espera
+      timeout: 10000, // 10 segundos máximo de espera
     });
-
-    this.context = '';
   }
 
   /**
    * Envía un archivo de audio a la API externa
    * @param {string} filePath - Ruta del archivo .wav
-   * @param {Object} options - Opciones de contexto { useContext: boolean, updateContext: boolean }
    * @returns {Promise<Object>} Respuesta de la API
    */
-  async enviarAudio(filePath, options = {}) {
-    const { useContext = true, updateContext = true } = options;
-
+  async enviarAudio(filePath) {
     try {
       const form = new FormData();
       form.append('file', fs.createReadStream(filePath));
 
-      // Si necesitas enviar metadatos adicionales
-      // Solo enviamos el contexto si useContext es true
-      const promptToSend = useContext ? (this.context || '') : '';
-      form.append('prompt', promptToSend);
+      // Se elimina la lógica de envío de 'prompt' de contexto.
+      // Si la API requiere un prompt vacío, puedes descomentar la siguiente línea:
+      // form.append('prompt', '');
 
-      console.log(`🚀 [AiService] Enviando: ${filePath} | Contexto: ${useContext ? 'SI' : 'NO'}`);
+      console.log(`🚀 [AiService] Enviando: ${filePath}`);
 
       // Usamos la instancia pre-configurada de axios
       // Nota: getHeaders() es necesario cuando usas form-data manual en Node
-      const response = await this.client.post('/trans?language=es', form, {
+      const response = await this.client.post('/emotion', form, {
         headers: {
           ...form.getHeaders()
         }
       });
 
-      console.log('🤖 [AiService] Respuesta:', response.data);
+      console.log('🤖 [EmotionService] Respuesta:', response.data);
 
-      // Solo actualizamos el contexto si updateContext es true
-      if (updateContext) {
-        this.context += " " + response.data.texto;
-      }
-
+      // Se elimina la lógica de actualización del contexto.
+      
       return response.data;
 
     } catch (error) {
@@ -67,9 +58,7 @@ class emotionService {
     }
   }
 
-  async resetContext() {
-    this.context = '';
-  }
+  // Se elimina el método async resetContext()
 }
 
 // --- TRUCO PRO ---

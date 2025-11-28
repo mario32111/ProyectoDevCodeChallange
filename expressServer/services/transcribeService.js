@@ -12,7 +12,7 @@ class transcribeService {
     // Configuración base de Axios para no repetirla
     this.client = axios.create({
       baseURL: this.baseUrl,
-      timeout: 20000, // 20 segundos máximo de espera
+      timeout: 10000, // 20 segundos máximo de espera
     });
 
     this.context = '';
