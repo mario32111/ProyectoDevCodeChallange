@@ -2,11 +2,12 @@ const path = require('path');
 const transcribeService = require('../services/transcribeService');
 const iaService = require('../services/openAIService');
 const { saveWavFile, RECORDINGS_DIR } = require('../services/audioService');
-const axios = require('axios');
-const request = axios.create({
-    baseURL: "http://localhost:3000",
-    timeout: 20000, // 20 segundos máximo de espera
-});
+const config = require('../config');
+const client = require('twilio')(config.twilioAccountSid, config.twilioAuthToken);
+const { VoiceResponse } = require('twilio').twiml;
+
+let fullAiResponse = '';
+let questionSent = false; // Bandera para asegurar que la pregunta solo se envíe una vez.
 module.exports = (app) => {
     app.ws('/stream', (ws, req) => {
         console.log('¡Conexión de WebSocket /stream establecida!');
@@ -42,9 +43,10 @@ module.exports = (app) => {
 
                             const transcribeResponse = await transcribeService.enviarAudio(filePath);
                             //const emotionResponse = await emotionService.enviarAudio(filePath);
-                            const messages = [{ role: 'user', content: transcribeResponse.texto }];
-                            const emotions = [{ role: 'user', content: 'sad' }];
-                            iaService.streamingCompletion(messages, emotions, ws);
+                            const userMessageContent = transcribeResponse.texto;
+                            const emotionContent = 'sad'; // Usa la emoción real aquí cuando esté lista
+
+                            iaService.streamingCompletion(callSid, userMessageContent, emotionContent, ws);
                         }
                         if (!saved30s && streamBuffer.length >= CHUNK_SIZE_30S) {
                             // Marcamos como guardado ANTES del await
@@ -55,15 +57,16 @@ module.exports = (app) => {
                             const filePath30 = path.join(RECORDINGS_DIR, filename30);
                             saveWavFile(chunk30s, filePath30);
                             console.log('🌟 Clip acumulado de 30 segundos guardado.');
- /*                            const response = await transcribeService.enviarAudio(filePath30, { useContext: false, updateContext: false });
-                            const messages = [{ role: 'user', content: response.texto }];
-                            const emotions = [{ role: 'user', content: 'sad' }];
-                            iaService.streamingCompletion(messages, emotions, ws); */
+                            /*                            const response = await transcribeService.enviarAudio(filePath30, { useContext: false, updateContext: false });
+                                                       const messages = [{ role: 'user', content: response.texto }];
+                                                       const emotions = [{ role: 'user', content: 'sad' }];
+                                                       iaService.streamingCompletion(messages, emotions, ws); */
                         }
                         break;
                     case 'stop':
                         console.log('Evento "stop": La llamada ha terminado.');
                         transcribeService.resetContext();
+                        // iaService.resetHistory(callSid); // 🚨 Comentado para mantener el contexto entre streams (TwiML updates).
                         break;
                 }
             } catch (error) {
@@ -71,10 +74,74 @@ module.exports = (app) => {
             }
         });
         ws.on('ai_chunk', (data) => {
-            console.log('IA Chunk:', data);
+            const chunkContent = data.chunk;
+
+            // 1. Acumulamos el contenido del chunk para reconstruir el JSON.
+            fullAiResponse += chunkContent;
+
+            // 2. Si la pregunta aún no se ha enviado, intentamos detectarla.
+            if (!questionSent) {
+                try {
+                    // Intentamos parsear el JSON completo acumulado hasta ahora.
+                    // Esto solo funcionará si el JSON es lo suficientemente completo (e.g., está cerrado).
+                    const partialJson = JSON.parse(fullAiResponse);
+
+                    // 3. Verificamos si el campo de la pregunta existe en el objeto parseado.
+                    if (partialJson.proxima_pregunta_agente) {
+                        const question = partialJson.proxima_pregunta_agente;
+
+                        console.log(`[Agente Talk] 💬 Pregunta Crítica Detectada: "${question}"`);
+
+                        // 4. Enviamos la pregunta crítica a /talk.
+                        // 4. Interrumpimos la llamada para que Twilio hable.
+                        console.log(`[Agente Talk] 🗣️ Hablando: "${question}"`);
+
+                        const twiml = new VoiceResponse();
+                        twiml.say({
+                            voice: 'es-MX-Standard-A',
+                            language: 'es-MX'
+                        }, question);
+
+                        // Reconectamos el stream para escuchar la respuesta del usuario
+                        const connect = twiml.connect();
+                        connect.stream({
+                            url: `wss://${config.wsUrl}/stream`,
+                            track: 'inbound_track'
+                        });
+
+                        client.calls(callSid)
+                            .update({
+                                twiml: twiml.toString()
+                            })
+                            .then(call => {
+                                console.log('[Agente Talk] ✅ Llamada actualizada con respuesta de voz.');
+                                questionSent = true;
+                            })
+                            .catch(err => {
+                                console.error('[Agente Talk] ❌ Error actualizando llamada:', err);
+                            });
+                    }
+                } catch (error) {
+                    // Es normal que falle el JSON.parse hasta que el JSON esté completo o al menos 
+                    // hasta que los primeros campos estén bien formados. No imprimimos errores aquí.
+                }
+            }
+
+            // 5. Opcional: Si quieres ver el JSON completo al final, puedes usar ws.on('ai_end')
+            // En el flujo actual, solo necesitas enviar la pregunta y luego el sistema
+            // debería usar 'ai_end' para obtener el JSON final.
+
+            // **IMPORTANTE:** El campo 'message' que estabas usando ya no es necesario aquí.
+            // La lógica de envío a /talk debería estar diseñada para que el agente
+            // conversacional sepa cuándo hablar (e.g., solo con la pregunta crítica).
         });
+
+
         ws.on('close', () => {
             console.log('Conexión de WebSocket /stream cerrada.');
+            // Limpiamos la bandera y el buffer al cerrar la conexión.
+            fullAiResponse = '';
+            questionSent = false;
         });
     });
 };
