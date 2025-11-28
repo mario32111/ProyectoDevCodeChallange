@@ -10,9 +10,11 @@ import SuicidioView from "./views/SuicidioView";
 import InteligenciaC5 from "./views/Inteligencia5";
 import ReportesView from "./views/ReportesView";
 import ViolenciaView from "./views/ViolenciaView"; 
-// (Crea los archivos vacíos para que no de error o comenta los imports)
+import DesastresView from "./views/DesastresView";
+// MODIFICACIÓN 1: Importamos la nueva vista de Accidentes
+import AccidentesView from "./views/AccidentesView";
 
-// Datos Mockup (Puedes moverlos a un archivo src/data/mockData.js)
+// Datos Mockup (Intactos)
 const initialCalls = [
   {
     id: 101, 
@@ -72,7 +74,7 @@ const reportData = [
   { zona: "Domingo Arrieta", incidentes: 115, tipo: "Ruido / Fiesta", trend: "0%" },
 ];
 
-// --- COMPONENTES AUXILIARES ---
+// --- COMPONENTES AUXILIARES (Intactos) ---
 
 const ScoreGauge = ({ score }) => {
   const color = score > 70 ? "#ef4444" : score > 30 ? "#eab308" : "#22c55e";
@@ -117,7 +119,7 @@ const DurangoHeatmap = () => (
   <div style={{ 
     background: '#e2e8f0', height: '300px', borderRadius: '12px', position: 'relative', overflow: 'hidden',
     display: 'flex', alignItems: 'center', justifyContent: 'center'
-  }}>
+   }}>
     <div style={{ position: 'absolute', inset: 0, opacity: 0.3, backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
     <div style={{ width: '120px', height: '120px', background: 'red', borderRadius: '50%', filter: 'blur(40px)', opacity: 0.6, position: 'absolute', top: '30%', left: '40%' }}></div>
     <div style={{ width: '80px', height: '80px', background: 'orange', borderRadius: '50%', filter: 'blur(30px)', opacity: 0.5, position: 'absolute', bottom: '30%', left: '25%' }}></div>
@@ -129,8 +131,8 @@ const DurangoHeatmap = () => (
 
 // --- APP PRINCIPAL ---
 export default function App() {
-  // Estado para controlar qué vista se muestra
-  const [currentView, setView] = useState("centro"); 
+  // MODIFICACIÓN 2: Iniciamos en "accidentes" para ver la nueva vista
+  const [currentView, setView] = useState("accidentes"); 
 
   // Función para renderizar el contenido dinámico
   const renderContent = () => {
@@ -144,11 +146,14 @@ export default function App() {
       case "suicidio":
         return <SuicidioView />;
       case "violencia":
-        return <div>Vista Agente Violencia (En construcción)</div>;
+        return <ViolenciaView />;
       case "desastres":
-        return <div>Vista Agente Desastres (En construcción)</div>;
+        return <DesastresView />;
+        
+      // MODIFICACIÓN 3: Activamos el componente real de Accidentes
       case "accidentes":
-        return <div>Vista Agente Accidentes (En construcción)</div>;
+        return <AccidentesView />;
+        
       default:
         return <CentroMando initialCalls={initialCalls} />;
     }
@@ -161,11 +166,14 @@ export default function App() {
 
       {/* 2. Área de Contenido Dinámico */}
       <main className="content-area">
-        {/* Header simple (o muévelo a un componente Header.jsx) */}
+        {/* Header simple con título dinámico */}
         <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1e293b' }}>
             {currentView === 'centro' ? 'Centro de Mando 911' : 
-             currentView === 'suicidio' ? 'Inteligencia: Salud Mental' : 'Panel de Control'}
+             currentView === 'suicidio' ? 'Inteligencia: Salud Mental' : 
+             currentView === 'desastres' ? 'Protección Civil y Riesgos' : 
+             currentView === 'accidentes' ? 'Tránsito y Vialidad' : // Título nuevo
+             'Panel de Control'}
           </h1>
           <div style={{ fontSize: '0.9rem', color: '#64748b' }}>Durango, Dgo. | 🟢 Sistema Operativo</div>
         </header>
