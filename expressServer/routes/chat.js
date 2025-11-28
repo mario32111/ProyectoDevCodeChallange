@@ -10,10 +10,12 @@ router.post('/', (req, res) => {
     const { messages } = req.body;
     const ws = req.ws; // Obtenemos 'io' del middleware (si existe)
     const iaService = require('../services/openAIService');
-
+    const userMessageContent = "";
+    const emotionContent = 'sad'; // Usa la emoción real aquí cuando esté lista
     if (ws) {
         // 1. Iniciar el trabajo (SIN AWAIT)
-        iaService.streamingCompletion(messages, ws)
+        const callSid = req.body.callSid || (ws && ws.id) || 'default_chat_session';
+        iaService.streamingCompletion(callSid, userMessageContent, emotionContent, ws)
             .catch(err => {
                 console.error('[Error de Inicio] Fallo al iniciar el stream:', err);
                 ws.emit('remote_error', {
