@@ -1,9 +1,10 @@
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Form
 from faster_whisper import WhisperModel
-# IMPORTANTE: Usamos AutoFeatureExtractor, NO AutoProcessor
+from pydub import AudioSegment
 from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 import torch
+import torch.nn.functional as F
 import librosa
 import numpy as np
 import tempfile
@@ -13,200 +14,229 @@ import time
 import uuid
 
 # ==========================================
-# CONFIGURACIÓN E INICIALIZACIÓN DE MODELOS
+# CONFIGURACIÓN E INICIALIZACIÓN
 # ==========================================
 
-print("--- INICIANDO SERVIDOR DE IA ---")
-
-# 1. Configuración de Dispositivo (CPU/GPU)
+print("--- INICIANDO SERVIDOR DE IA (3 MODELOS INDEPENDIENTES) ---")
 device_str = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Dispositivo detectado: {device_str}")
 
-# --- CARGA DEL MODELO 1: WHISPER (Transcripción) ---
-print("\n[1/2] Cargando modelo Whisper (large-v3)...")
+# --- 1. WHISPER (Transcripción) ---
 WHISPER_MODEL_SIZE = "base"
-WHISPER_COMPUTE_TYPE = "int8" 
-
+print(f"\n[1/3] Cargando Whisper ({WHISPER_MODEL_SIZE})...")
 try:
-    whisper_model = WhisperModel(WHISPER_MODEL_SIZE, device=device_str, compute_type=WHISPER_COMPUTE_TYPE)
-    print(f"✅ Whisper cargado exitosamente en {device_str} ({WHISPER_COMPUTE_TYPE}).")
+    whisper_model = WhisperModel(WHISPER_MODEL_SIZE, device=device_str, compute_type="int8", download_root="./models_whisper")
+    print("✅ Whisper Listo.")
 except Exception as e:
-    print(f"❌ Error fatal al cargar Whisper: {e}")
+    print(f"❌ Error Whisper: {e}")
     exit(1)
 
-# --- CARGA DEL MODELO 2: EMOCIONES (HuggingFace) ---
-print("\n[2/2] Cargando modelo de Emociones...")
-EMOTION_MODEL_ID = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+# --- 2. EMOCIONES (Voz Humana) ---
+print("\n[2/3] Cargando modelo de Emociones...")
+EMOTION_MODEL_ID = "superb/wav2vec2-base-superb-er"  # El modelo estable
 
 try:
-    # 1. Cargar el Modelo
-    emotion_model = AutoModelForAudioClassification.from_pretrained(EMOTION_MODEL_ID)
-    
-    # 2. CORRECCIÓN: Usar AutoFeatureExtractor en lugar de AutoProcessor
-    # Esto evita que busque un tokenizer que no existe y cause el error NoneType
-    feature_extractor = AutoFeatureExtractor.from_pretrained(EMOTION_MODEL_ID)
-    
-    # Mapeo de IDs a etiquetas
-    id2label = emotion_model.config.id2label
-    
-    # Mover a GPU si es posible
-    emotion_device = torch.device(device_str)
-    emotion_model = emotion_model.to(emotion_device)
-    
-    print(f"✅ Modelo de Emociones cargado exitosamente en {emotion_device}.")
+    print(f"🔄 Cargando: {EMOTION_MODEL_ID}...")
+    emotion_extractor = AutoFeatureExtractor.from_pretrained(EMOTION_MODEL_ID, cache_dir="./models_emotion")
+    emotion_model = AutoModelForAudioClassification.from_pretrained(EMOTION_MODEL_ID, cache_dir="./models_emotion")
+    emotion_model = emotion_model.to(device_str)
+    id2label_emotion = emotion_model.config.id2label
+    print(f"✅ Sistema de Emociones listo.")
 except Exception as e:
-    print(f"❌ Error fatal al cargar modelo de emociones: {e}")
+    print(f"❌ Error fatal cargando emociones: {e}")
     exit(1)
 
+# --- 3. SONIDO AMBIENTAL (Fondo/Peligros) ---
+print("\n[3/3] Cargando modelo de Ambiente (AST)...")
+ENV_MODEL_ID = "MIT/ast-finetuned-audioset-10-10-0.4593"
+
+try:
+    print(f"🔄 Cargando: {ENV_MODEL_ID}...")
+    env_extractor = AutoFeatureExtractor.from_pretrained(ENV_MODEL_ID, cache_dir="./models_env")
+    env_model = AutoModelForAudioClassification.from_pretrained(ENV_MODEL_ID, cache_dir="./models_env")
+    env_model = env_model.to(device_str)
+    id2label_env = env_model.config.id2label
+    print(f"✅ Sistema Ambiental listo.")
+except Exception as e:
+    print(f"❌ Error fatal cargando modelo ambiental: {e}")
+    exit(1)
+
+# Lista de sonidos peligrosos para filtrar
+DANGEROUS_SOUNDS = [
+    "Gunshot, gunfire", "Explosion", "Cap gun", "Fusillade", "Artillery fire", 
+    "Siren", "Police car (siren)", "Ambulance (siren)", "Fire engine, fire truck (siren)", 
+    "Civil defense siren", "Screaming", "Crying, sobbing", "Whimper", "Glass", 
+    "Breaking", "Shatter", "Smash, crash", "Aggressive"
+]
 
 # ==========================================
-# FUNCIONES AUXILIARES (Lógica de Negocio)
+# FUNCIONES AUXILIARES
 # ==========================================
 
-def preprocess_emotion_audio(audio_path, extractor, max_duration=30.0):
-    """Preprocesa el audio para el modelo de emociones usando librosa a 16kHz."""
-    # Wav2Vec2 requiere 16kHz OBLIGATORIAMENTE
+def convert_to_wav_16k(file_path):
+    """Convierte cualquier audio a WAV 16kHz Mono para las IAs"""
+    try:
+        audio = AudioSegment.from_file(file_path)
+        wav_path = file_path.rsplit('.', 1)[0] + ".wav"
+        # Exportar a WAV limpio
+        audio.set_frame_rate(16000).set_channels(1).export(wav_path, format="wav")
+        return wav_path
+    except Exception as e:
+        print(f"⚠️ Error conversión audio: {e}")
+        return file_path
+
+def predict_emotion_chunked(audio_path):
+    """Lógica de ventanas para detectar emociones en audios largos"""
     TARGET_SR = 16000
-    audio_array, sampling_rate = librosa.load(audio_path, sr=TARGET_SR)
-    
-    # Recorte manual para seguridad
-    max_length = int(TARGET_SR * max_duration)
-    if len(audio_array) > max_length:
-        audio_array = audio_array[:max_length]
-    
-    # Usamos el feature_extractor (no processor)
-    inputs = extractor(
-        audio_array,
-        sampling_rate=TARGET_SR,
-        return_tensors="pt",
-        padding=True,      # Rellena si es corto
-        max_length=max_length,
-        truncation=True    # Corta si es largo (seguridad extra)
-    )
-    return inputs
+    try:
+        y, sr = librosa.load(audio_path, sr=TARGET_SR, mono=True)
+    except: return None
 
-def get_emotion_prediction(audio_path):
-    """Ejecuta la inferencia del modelo de emociones."""
-    inputs = preprocess_emotion_audio(audio_path, feature_extractor)
+    # Normalizar si es muy bajo
+    if np.max(np.abs(y)) < 0.1: y = librosa.util.normalize(y)
     
-    # Mover inputs al dispositivo correcto
-    inputs = {key: value.to(emotion_device) for key, value in inputs.items()}
+    chunk_duration = 3.0
+    chunk_samples = int(chunk_duration * TARGET_SR)
+    
+    # Crear chunks
+    if len(y) < chunk_samples:
+        chunks = [np.pad(y, (0, chunk_samples - len(y)), mode='constant')]
+    else:
+        stride = int(2.0 * TARGET_SR)
+        chunks = [y[i : i + chunk_samples] for i in range(0, len(y) - chunk_samples + 1, stride)]
+        if not chunks: chunks = [y]
+
+    all_logits = []
+    for chunk in chunks:
+        inputs = emotion_extractor(chunk, sampling_rate=TARGET_SR, return_tensors="pt", padding=True)
+        inputs = {k: v.to(device_str) for k, v in inputs.items()}
+        with torch.no_grad():
+            all_logits.append(emotion_model(**inputs).logits)
+
+    if not all_logits: return None
+    
+    avg_logits = torch.mean(torch.stack(all_logits), dim=0)
+    probs = F.softmax(avg_logits, dim=-1)
+    
+    scores = {id2label_emotion[i]: float(probs[0][i].item() * 100) for i in range(len(probs[0]))}
+    predicted_label = id2label_emotion[torch.argmax(probs).item()]
+    
+    return {"dominante": predicted_label, "confianza": scores[predicted_label], "detalle": scores}
+
+def predict_environment_ast(audio_path):
+    """Detecta sonido de fondo (Sirenas, Disparos, etc.)"""
+    TARGET_SR = 16000
+    try:
+        y, sr = librosa.load(audio_path, sr=TARGET_SR, mono=True)
+    except: return None
+
+    # El modelo AST procesa todo el clip (máx 10s usualmente, el extractor lo maneja)
+    inputs = env_extractor(y, sampling_rate=TARGET_SR, return_tensors="pt", padding="max_length")
+    inputs = {k: v.to(device_str) for k, v in inputs.items()}
 
     with torch.no_grad():
-        outputs = emotion_model(**inputs)
+        logits = env_model(**inputs).logits
 
-    logits = outputs.logits
-    predicted_id = torch.argmax(logits, dim=-1).item()
+    # Sigmoid para multi-label (pueden sonar dos cosas a la vez)
+    probs = torch.sigmoid(logits).cpu().detach().numpy()[0]
     
-    # Si id2label falla (a veces pasa en modelos viejos), usamos fallback numérico
-    if id2label:
-        return id2label[predicted_id]
-    return str(predicted_id)
+    # Top 5 sonidos
+    top_5_indices = probs.argsort()[-5:][::-1]
+    
+    detected_sounds = []
+    alerts = []
+    
+    for i in top_5_indices:
+        label = id2label_env[i]
+        confidence = float(probs[i] * 100)
+        
+        if confidence > 5.0: # Umbral mínimo de detección
+            detected_sounds.append({"sonido": label, "probabilidad": round(confidence, 2)})
+            
+            # Checar si es peligroso
+            if label in DANGEROUS_SOUNDS and confidence > 15.0:
+                alerts.append(label)
 
+    return {"alertas": alerts, "ambiente": detected_sounds}
 
 # ==========================================
-# APLICACIÓN FASTAPI
+# API ENDPOINTS
 # ==========================================
 
-app = FastAPI(title="API Unificada de Audio (Transcripción + Emociones)")
-
-@app.get("/")
-def read_root():
-    return {
-        "estado": "Activo",
-        "modelos": {
-            "transcripcion": f"Whisper {WHISPER_MODEL_SIZE}",
-            "emociones": "Wav2Vec2-XLSR (ehcalabres)"
-        },
-        "dispositivo": device_str
-    }
+app = FastAPI()
 
 # --- ENDPOINT 1: TRANSCRIPCIÓN ---
 @app.post("/trans")
-def transcribe_audio(
-    file: UploadFile = File(...),
-    language: str = Query(None, description="Código de idioma (ej. 'es')."),
-    prompt: str = Form(None, description="Contexto previo del chat"),
-    task: str = Query("transcribe", enum=["transcribe", "translate"])
-):
-    start_time = time.time()
-    temp_file_path = None
-
+def transcribe_audio(file: UploadFile = File(...), language: str = Query(None)):
+    temp_path = f"temp_{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    wav_path = None
     try:
-        suffix = os.path.splitext(file.filename)[1]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            shutil.copyfileobj(file.file, temp_file)
-            temp_file_path = temp_file.name
-
-        segments, info = whisper_model.transcribe(
-            temp_file_path,
-            beam_size=1,
-            language=language,
-            task=task,
-            initial_prompt=prompt
-        )
-
-        full_text = " ".join([seg.text for seg in segments]).strip()
-        end_time = time.time()
-
-        return {
-            "servicio": "transcripcion",
-            "idioma_detectado": info.language,
-            "confianza": info.language_probability,
-            "texto": full_text,
-            "tiempo_procesamiento": round(end_time - start_time, 2)
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en transcripción: {str(e)}")
-
+        with open(temp_path, "wb") as f: shutil.copyfileobj(file.file, f)
+        wav_path = convert_to_wav_16k(temp_path)
+        
+        segments, _ = whisper_model.transcribe(wav_path, language=language, beam_size=1)
+        text = " ".join([s.text for s in segments]).strip()
+        return {"texto": text}
     finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try: os.remove(temp_file_path)
-            except: pass
+        if os.path.exists(temp_path): os.remove(temp_path)
+        if wav_path and os.path.exists(wav_path) and wav_path != temp_path: os.remove(wav_path)
 
-
-# --- ENDPOINT 2: EMOCIONES ---
+# --- ENDPOINT 2: EMOCIONES (Voz Humana) ---
 @app.post("/emotion")
 def predict_emotion_endpoint(file: UploadFile = File(...)):
-    temp_file_path = None
-    
+    temp_path = f"temp_{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    wav_path = None
     try:
-        file_extension = os.path.splitext(file.filename)[1]
-        temp_filename = f"{uuid.uuid4()}{file_extension}"
-        temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
+        with open(temp_path, "wb") as f: shutil.copyfileobj(file.file, f)
+        wav_path = convert_to_wav_16k(temp_path)
+        
+        start = time.time()
+        result = predict_emotion_chunked(wav_path)
+        
+        return {
+            "archivo": file.filename,
+            "emocion": result["dominante"],
+            "confianza": f"{round(result['confianza'], 2)}%",
+            "detalles": result["detalle"],
+            "tiempo": round(time.time() - start, 2)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if os.path.exists(temp_path): os.remove(temp_path)
+        if wav_path and os.path.exists(wav_path) and wav_path != temp_path: os.remove(wav_path)
 
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+# --- ENDPOINT 3: ANÁLISIS AMBIENTAL (Peligros de Fondo) ---
+@app.post("/analyze")
+def analyze_background_noise(file: UploadFile = File(...)):
+    """Solo detecta sonido de fondo: Sirenas, disparos, tráfico, etc."""
+    temp_path = f"temp_{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+    wav_path = None
+    try:
+        with open(temp_path, "wb") as f: shutil.copyfileobj(file.file, f)
+        # Convertimos a WAV 16k para que el modelo AST funcione perfecto
+        wav_path = convert_to_wav_16k(temp_path)
         
-        print(f"Analizando emoción en: {temp_file_path}")
-        start_time = time.time()
+        start = time.time()
+        result = predict_environment_ast(wav_path)
         
-        emotion = get_emotion_prediction(temp_file_path)
-        
-        end_time = time.time()
+        # Determinar nivel de riesgo basado SOLO en sonido de fondo
+        risk_level = "NORMAL"
+        if len(result['alertas']) > 0:
+            risk_level = "PELIGRO DETECTADO"
 
         return {
-            "servicio": "emociones",
             "archivo": file.filename,
-            "emocion_detectada": emotion,
-            "tiempo_procesamiento": round(end_time - start_time, 2)
+            "riesgo_ambiental": risk_level,
+            "alertas_fondo": result["alertas"],
+            "todos_los_sonidos": result["ambiente"],
+            "tiempo": round(time.time() - start, 2)
         }
-
     except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Error en detección de emociones: {str(e)}")
-    
+        return {"error": str(e)}
     finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except PermissionError:
-                pass
+        if os.path.exists(temp_path): os.remove(temp_path)
+        if wav_path and os.path.exists(wav_path) and wav_path != temp_path: os.remove(wav_path)
 
-# ==========================================
-# EJECUCIÓN
-# ==========================================
 if __name__ == "__main__":
-    print("🚀 Iniciando servidor unificado en http://0.0.0.0:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
