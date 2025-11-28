@@ -1,13 +1,9 @@
+/* --- 1. VARIABLES Y CONFIGURACIÓN BASE --- */
 :root {
-  /* --- PALETA CLARA Y LIMPIA (Idéntica a tu diseño) --- */
-  --bg-color: #f1f5f9;       /* Gris muy suave de fondo */
-  --card-bg: #ffffff;        /* Blanco puro */
-  
-  /* Textos */
-  --text-primary: #1e293b;   /* Azul oscuro casi negro (profesional) */
-  --text-secondary: #64748b; /* Gris medio */
-  
-  /* Colores de Prioridad (Vibrantes pero legibles) */
+  --bg-color: #f1f5f9;
+  --card-bg: #ffffff;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
   --color-bajo: #22c55e;
   --color-medio: #eab308;
   --color-alto: #f97316;
@@ -19,30 +15,52 @@ body {
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   margin: 0;
-  padding: 20px;
+  padding: 0;
 }
 
 .container {
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
+  padding: 20px;
 }
 
-/* --- Header "Glass" (Vidrio elegante) --- */
+/* --- 2. LAYOUT PRINCIPAL (Sidebar) --- */
+.main-layout {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar-container {
+  width: 260px;
+  background: white;
+  border-right: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.content-area {
+  flex-grow: 1;
+  padding: 20px;
+  background-color: var(--bg-color);
+  overflow-y: auto;
+}
+
+/* --- 3. HEADER GLOBAL --- */
 .header {
-  background: rgba(255, 255, 255, 0.85); /* Blanco translúcido */
-  backdrop-filter: blur(8px);            /* Efecto borroso detrás */
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
   z-index: 50;
-  
   padding: 1rem 2rem;
-  border-radius: 0 0 16px 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); /* Sombra muy suave */
-  border-bottom: 1px solid white;
-  
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255,255,255,0.5);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 2rem;
 }
 
@@ -52,162 +70,125 @@ body {
   font-weight: 800;
   font-size: 1.2rem;
   color: #0f172a;
-  margin-right: 4rem;
-}
-
-.nav-buttons button {
-  background: none;
-  border: none;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-right: 2rem;
-  cursor: pointer;
-  padding-bottom: 4px;
-  transition: color 0.2s;
-}
-
-.nav-buttons button:hover { color: #2563eb; }
-
-.nav-buttons button.active {
-  color: #2563eb;
-  border-bottom: 2px solid #2563eb;
-}
-
-/* --- Tarjetas Principales (Contenedores) --- */
-.card {
-  background: var(--card-bg);
-  border-radius: 16px; /* Bordes más redondos = más moderno */
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid #e2e8f0; /* Borde sutil */
-}
-
-.title {
-  color: #1e3a8a; /* Azul corporativo */
-  font-weight: 700;
-  margin-bottom: 1.5rem;
-  font-size: 1.1rem;
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 3fr 1fr;
-  gap: 1.5rem;
-}
-
-.left-panel { display: flex; flex-direction: column; gap: 2rem; }
-
-/* --- Kanban (Columnas) --- */
-.columns-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-}
-
-.kanban-col { display: flex; flex-direction: column; }
-
-.column-header {
-  padding: 0.6rem;
-  color: white;
-  font-weight: bold;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  border-radius: 10px 10px 0 0; /* Redondeado arriba */
-  text-align: center;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.column-body {
-  background-color: #f8fafc; /* Gris muy claro adentro */
-  min-height: 220px;
-  padding: 0.8rem;
-  border: 1px solid #e2e8f0;
-  border-top: none;
-  border-radius: 0 0 10px 10px; /* Redondeado abajo */
-  display: flex;
-  flex-direction: column;
   gap: 10px;
 }
 
-/* --- TARJETAS INTERACTIVAS (Items) --- */
-.task-card {
-  background: white;
-  padding: 12px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Sombra sutil */
-  border-left: 4px solid #cbd5e1;
-  
-  cursor: grab;
-  position: relative;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid #f1f5f9;
+.nav-buttons { display: flex; gap: 10px; }
+.nav-btn {
+  background: none; border: none; font-size: 0.95rem; font-weight: 600;
+  color: var(--text-secondary); padding: 10px 20px; border-radius: 8px;
+  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+}
+.nav-btn:hover { background-color: #f1f5f9; color: #2563eb; }
+.nav-btn.active { background-color: #2563eb; color: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2); }
+
+/* --- 4. GRIDS Y ESTRUCTURA --- */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.reports-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+.kpi-grid { 
+  display: grid; 
+  grid-template-columns: repeat(3, 1fr); 
+  gap: 1rem; 
+  margin-bottom: 1.5rem; 
 }
 
-/* INTERACCIÓN: Al pasar el mouse */
-.task-card:hover {
-  transform: translateY(-4px); /* Se levanta */
-  box-shadow: 0 10px 20px rgba(0,0,0,0.1); /* Sombra crece */
-  z-index: 10;
-}
-
-.task-card:active { cursor: grabbing; transform: scale(0.98); }
-
-.task-card p {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #334155;
-  font-weight: 600;
-  display: flex; align-items: center; gap: 8px;
-}
-
-/* Colores de borde */
-.border-bajo { border-left-color: var(--color-bajo) !important; }
-.border-medio { border-left-color: var(--color-medio) !important; }
-.border-alto { border-left-color: var(--color-alto) !important; }
-.border-maximo { border-left-color: var(--color-maximo) !important; }
-
-/* --- Gráficas --- */
-.chart-container {
-  display: flex; align-items: center; justify-content: center;
-  height: 200px; position: relative;
-}
-.pie-chart { width: 150px; height: 150px; border-radius: 50%; }
-.donut-hole {
-  width: 60%; height: 60%;
-  background-color: var(--card-bg);
-  border-radius: 50%; position: absolute;
-}
-.legend {
-  font-size: 0.8rem; color: var(--text-secondary);
-  display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem;
-}
-.legend-item { display: flex; align-items: center; gap: 8px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; }
-
-/* --- Inputs --- */
-input[type="text"] {
-  background: #f8fafc; border: 1px solid #cbd5e1;
-  border-radius: 20px; padding: 6px 15px; outline: none; color: #334155;
-}
-input[type="text"]:focus {
-  border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-/* --- Animación de Entrada --- */
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.dashboard-grid, .header {
-  animation: slideUp 0.6s ease-out forwards;
-}
+/* --- 5. TARJETAS (CARDS) --- */
 .card {
-  opacity: 0;
-  animation: slideUp 0.6s ease-out forwards;
-  animation-delay: 0.1s;
+  background: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
 }
+.card.highlight { border-top: 4px solid #3b82f6; }
+
+/* --- 6. LISTA DE LLAMADAS --- */
+.call-item {
+  padding: 15px;
+  border-radius: 12px;
+  background: white;
+  border: 1px solid #f1f5f9;
+  border-left: 4px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 10px;
+  position: relative; 
+}
+.call-item:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+.call-item.selected { background-color: #eff6ff; border-color: #bfdbfe; }
+.border-red { border-left-color: var(--color-maximo); }
+.border-orange { border-left-color: var(--color-alto); }
+.border-yellow { border-left-color: var(--color-medio); }
+.border-green { border-left-color: var(--color-bajo); }
+
+/* --- 7. BADGES (Etiquetas) --- */
+.badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+.badge.gray { background: #fef9c3; color: #854d0e; }
+.badge.live { background: #dbeafe; color: #1e40af; }
+
+/* --- 8. CHAT Y TRANSCRIPCIÓN --- */
+.transcript-box {
+  background: #f8fafc; border-radius: 12px; padding: 15px; flex-grow: 1;
+  overflow-y: auto; border: 1px solid #e2e8f0; display: flex; flex-direction: column;
+  gap: 10px; min-height: 200px;
+}
+.chat-bubble { padding: 10px 14px; border-radius: 10px; font-size: 0.9rem; max-width: 90%; line-height: 1.4; }
+.chat-bubble.user { background: white; border: 1px solid #e2e8f0; align-self: flex-start; color: #334155; }
+
+/* --- 9. PANELES DE ANÁLISIS --- */
+.analysis-panel { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 15px; margin-bottom: 15px; }
+.analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.info-block { background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
+.info-label { font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+.keyword-tag { display: inline-flex; align-items: center; gap: 4px; background: #fee2e2; color: #991b1b; font-size: 0.75rem; font-weight: 700; padding: 4px 8px; border-radius: 4px; margin-right: 5px; border: 1px solid #fecaca; }
+.ai-diagnosis { font-size: 0.85rem; color: #334155; line-height: 1.4; font-weight: 500; border-left: 3px solid #3b82f6; padding-left: 10px; }
+
+/* --- 10. BOTONES DE ACCIÓN --- */
+.action-row { display: flex; gap: 5px; margin-top: 10px; }
+.icon-btn { border: 1px solid #e2e8f0; background: white; border-radius: 6px; padding: 6px 10px; font-size: 0.75rem; font-weight: 600; color: #475569; cursor: pointer; display: flex; align-items: center; gap: 5px; flex: 1; justify-content: center; transition: all 0.1s; }
+.icon-btn:hover { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
+.icon-btn.red:hover { background: #fef2f2; color: #ef4444; border-color: #fca5a5; }
+.icon-btn.blue:hover { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+
+/* --- 11. ESTADÍSTICAS Y MÉTRICAS --- */
+.metric-value { font-size: 2rem; font-weight: 800; color: #0f172a; margin: 5px 0; }
+.metric-label { font-size: 0.85rem; color: #64748b; font-weight: 600; }
+
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+.stat-row:last-child { border-bottom: none; }
+.stat-label { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; color: #475569; }
+.stat-dot { width: 10px; height: 10px; border-radius: 50%; }
+.stat-val { font-weight: 800; color: #1e293b; }
+
+/* Gráfico de Donas */
+.donut-container { position: relative; width: 180px; height: 180px; margin: 0 auto 20px auto; border-radius: 50%; background: conic-gradient(#ef4444 0% 52%, #f97316 52% 72%, #3b82f6 72% 86%, #e2e8f0 86% 100%); display: flex; justify-content: center; align-items: center; }
+.donut-inner { width: 140px; height: 140px; background: white; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+/* --- 12. TABLAS Y REPORTES --- */
+.data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.data-table th { text-align: left; padding: 10px; border-bottom: 2px solid #e2e8f0; color: #64748b; font-size: 0.8rem; text-transform: uppercase; }
+.data-table td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; color: #334155; }
+.data-table tr:last-child td { border-bottom: none; }
+.trend-up { color: #ef4444; font-weight: bold; font-size: 0.8rem; }
+.trend-down { color: #22c55e; font-weight: bold; font-size: 0.8rem; }
+
+.report-metric-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 10px; }
+.report-metric-val { font-size: 1.5rem; font-weight: 800; color: #1e293b; }
+.report-metric-desc { font-size: 0.8rem; color: #64748b; }
