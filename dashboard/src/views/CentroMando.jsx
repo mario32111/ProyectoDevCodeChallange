@@ -8,10 +8,13 @@ import {
   Search,
   Tag,
   Volume2,
-  Headphones
+  Clock,
+  Headphones,
+  Phone,
+  Radio
 } from "lucide-react";
 
-// --- DATOS MOCKUP (Solo llamadas) ---
+// --- DATOS MOCKUP ---
 const initialCalls = [
   { id: 101, time: "Hace 2s", phone: "618-123-XXXX", score: 92, status: "active", type: "Violencia", location: "Centro Histórico", transcript: "...está golpeando la puerta, tiene un cuchillo, ayuda...", aiResponse: "Patrón de estrés extremo confirmado.", keywords: ["Cuchillo", "Golpeando", "Ayuda"], voiceStatus: "Agitada / Gritos", audioLevel: "high" },
   { id: 102, time: "Hace 15s", phone: "618-555-XXXX", score: 45, status: "gray_zone", type: "Incierto", location: "Jardines de Durango", transcript: "(Silencio)... (Ruido de viento)... (Respiración agitada)...", aiResponse: "Posible situación de coacción detectada.", keywords: ["Silencio Positivo", "Viento"], voiceStatus: "Susurros / Silencio", audioLevel: "low" },
@@ -22,166 +25,255 @@ const initialCalls = [
 const ScoreGauge = ({ score }) => {
   const color = score > 70 ? "#ef4444" : score > 30 ? "#eab308" : "#22c55e";
   return (
-    <div style={{ position: 'relative', width: '120px', height: '60px', display: 'flex', justifyContent: 'center' }}>
+    <div style={{ position: 'relative', width: '100px', height: '50px', display: 'flex', justifyContent: 'center' }}>
        <svg viewBox="0 0 100 50" width="100%" height="100%">
-         <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e2e8f0" strokeWidth="8" strokeLinecap="round" />
-         <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" strokeDasharray="126" strokeDashoffset={126 - (score / 100) * 126} style={{ transition: 'stroke-dashoffset 1s ease' }} />
+         <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f1f5f9" strokeWidth="10" strokeLinecap="round" />
+         <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" strokeDasharray="126" strokeDashoffset={126 - (score / 100) * 126} style={{ transition: 'stroke-dashoffset 1s ease' }} />
        </svg>
-       <div style={{ position: 'absolute', bottom: '0', textAlign: 'center' }}>
-         <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: color }}>{score}</span>
-         <div style={{ fontSize: '0.6rem', color: '#94a3b8', fontWeight: 'bold' }}>RIESGO</div>
+       <div style={{ position: 'absolute', bottom: '-5px', textAlign: 'center' }}>
+         <span style={{ fontSize: '1.4rem', fontWeight: '800', color: color, lineHeight: 1 }}>{score}</span>
+         <div style={{ fontSize: '0.5rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>RIESGO</div>
        </div>
     </div>
   );
 };
 
 const AudioWave = ({ level }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: '3px', height: '20px' }}>
-    {[...Array(8)].map((_, i) => (
-      <div key={i} style={{ width: '4px', backgroundColor: '#3b82f6', borderRadius: '2px', height: level === 'high' ? `${Math.random() * 100}%` : '30%', transition: 'height 0.1s ease' }} />
+  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', height: '24px' }}>
+    {[...Array(12)].map((_, i) => (
+      <div key={i} className="wave-bar" style={{ 
+          width: '3px', backgroundColor: level === 'high' ? '#ef4444' : '#3b82f6', borderRadius: '2px', 
+          height: level === 'high' ? '100%' : '40%', 
+          animationDelay: `${i * 0.05}s` 
+      }} />
     ))}
   </div>
 );
 
-// --- COMPONENTE PRINCIPAL (Solo Centro de Mando) ---
+// --- COMPONENTE PRINCIPAL ---
 export default function CentroMando() {
   const [selectedCall, setSelectedCall] = useState(initialCalls[0]);
 
+  // Estilos
+  const styles = {
+    container: { display: 'flex', flexDirection: 'column', gap: '24px', height: '100%', fontFamily: 'Inter, sans-serif' },
+    
+    topSection: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
+    bottomSection: { display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: '24px', flexGrow: 1 },
+
+    cardBase: { background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', overflow: 'hidden' },
+
+    callCard: (isActive, score) => ({
+      background: isActive ? '#eff6ff' : 'white',
+      border: isActive ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+      borderRadius: '12px',
+      padding: '16px',
+      cursor: 'pointer',
+      position: 'relative',
+      transition: 'all 0.2s ease',
+      boxShadow: isActive ? '0 10px 15px -3px rgba(59, 130, 246, 0.1)' : '0 2px 4px rgba(0,0,0,0.02)',
+    }),
+
+    actionBtn: (type) => ({
+      width: '100%', padding: '10px', borderRadius: '8px', border: 'none', fontSize: '0.8rem', fontWeight: '600',
+      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s',
+      background: type === 'hangup' ? '#fee2e2' : '#f1f5f9',
+      color: type === 'hangup' ? '#ef4444' : '#475569',
+    }),
+
+    label: { fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }
+  };
+
   return (
-    /* Usamos directamente el Grid global definido en App.css */
-    <div className="dashboard-grid">
+    <div style={styles.container} className="fade-in">
       
-      {/* 1. COLUMNA IZQUIERDA: LISTA DE LLAMADAS */}
+      {/* CSS Animaciones */}
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.6s ease-out forwards; }
+
+        @keyframes pulse-live { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+        .live-indicator { animation: pulse-live 1.5s infinite ease-in-out; }
+
+        @keyframes wave { 0%, 100% { height: 30%; } 50% { height: 100%; } }
+        .wave-bar { animation: wave 0.8s ease-in-out infinite; }
+
+        /* NUEVA ANIMACIÓN DE PULSO GRIS */
+        @keyframes pulse-gray {
+          0% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0.4); } /* Color Gris */
+          70% { box-shadow: 0 0 0 6px rgba(100, 116, 139, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(100, 116, 139, 0); }
+        }
+        .pulse-monitoring { animation: pulse-gray 2s infinite; }
+
+        /* Onda de audio gris para la zona de monitoreo */
+        @keyframes wave-mini { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+        .wave-bar-gray { width: 3px; background: #64748b; border-radius: 1px; animation: wave-mini 1s ease-in-out infinite; }
+
+        .call-card-hover:hover { transform: translateY(-3px); box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.08); border-color: #cbd5e1; }
+        .btn-hover:hover { filter: brightness(0.95); transform: scale(1.02); }
+      `}</style>
+
+      {/* --- SECCIÓN SUPERIOR: ENTRANTES --- */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: '#1e293b' }}>Entrantes</h3>
-          <span className="badge live">LIVE</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '15px' }}>
+          <div style={{ background: '#ef4444', padding: '6px', borderRadius: '8px', boxShadow: '0 4px 10px rgba(239,68,68,0.3)' }}>
+             <Phone size={20} color="white" />
+          </div>
+          <div>
+             <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '800', color: '#1e293b' }}>Llamadas Entrantes</h3>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>
+               <span className="live-indicator" style={{ width:'8px', height:'8px', background:'#ef4444', borderRadius:'50%' }}></span>
+               SISTEMA EN VIVO
+             </div>
+          </div>
         </div>
-        
-        {initialCalls.map((call) => (
-          <div 
-            key={call.id}
-            onClick={() => setSelectedCall(call)}
-            className={`call-item ${selectedCall.id === call.id ? 'selected' : ''} ${
-              call.score > 70 ? 'border-red' : call.score > 30 ? 'border-yellow' : 'border-green'
-            }`}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{call.phone}</span>
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{call.time}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.85rem', color: '#64748b' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: call.score > 70 ? '#ef4444' : '#eab308' }}></div>
-                  Score: {call.score}
-                </div>
-                {call.status === 'gray_zone' && <span className="badge gray">ZONA GRIS</span>}
-            </div>
-            
-            <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '8px', paddingTop: '8px' }}>
-              <button className="icon-btn red" style={{ width: '100%', padding: '4px', fontSize: '0.75rem' }} onClick={(e) => { e.stopPropagation(); alert(`Colgando llamada ${call.phone}`); }}>
-                  <PhoneOff size={12}/> Colgar
+
+        <div style={styles.topSection}>
+          {initialCalls.map((call, idx) => (
+            <div 
+              key={call.id}
+              onClick={() => setSelectedCall(call)}
+              style={styles.callCard(selectedCall.id === call.id, call.score)}
+              className="call-card-hover"
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                 <div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.5px' }}>{call.phone}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontSize: '0.85rem', marginTop: '4px' }}>
+                       <Clock size={14} /> {call.time}
+                    </div>
+                 </div>
+                 <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: '800', color: call.score > 70 ? '#ef4444' : '#eab308' }}>{call.score}%</div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 'bold', color: '#94a3b8' }}>SCORE</div>
+                 </div>
+              </div>
+
+              {/* Badges (Zona Gris ahora es gris) */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+                 {call.type === 'Violencia' && <span style={{ background:'#fee2e2', color:'#b91c1c', padding:'4px 8px', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'bold' }}>VIOLENCIA</span>}
+                 {/* CAMBIO AQUÍ: Badge de Zona Gris en tonos Grises */}
+                 {call.status === 'gray_zone' && <span style={{ background:'#f3f4f6', color:'#4b5563', padding:'4px 8px', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'bold', border: '1px solid #e5e7eb' }}>ZONA GRIS</span>}
+              </div>
+
+              <button style={styles.actionBtn('hangup')} className="btn-hover" onClick={(e) => { e.stopPropagation(); alert('Colgando...'); }}>
+                 <PhoneOff size={16} /> Colgar Llamada
               </button>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* 2. COLUMNA CENTRAL: DETALLE (COCKPIT) */}
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '15px' }}>
-        <div className="card highlight">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-              <div>
-                <h2 style={{ margin: '0 0 5px 0', fontSize: '1.5rem', color: '#1e293b' }}>{selectedCall.phone}</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#64748b', fontSize: '0.9rem' }}>
-                    <MapPin size={16} /> {selectedCall.location}
-                </div>
-              </div>
-              <ScoreGauge score={selectedCall.score} />
-          </div>
-
-          <div className="analysis-grid">
-            <div className="info-block">
-              <div className="info-label"><Volume2 size={14}/> Biometría de Voz</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-                <AudioWave level={selectedCall.audioLevel} />
-                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: selectedCall.score > 70 ? '#ef4444' : '#64748b' }}>
-                  {selectedCall.voiceStatus}
-                </span>
-              </div>
-            </div>
-
-            <div className="info-block">
-              <div className="info-label"><Tag size={14}/> Palabras Clave</div>
-              <div>
-                {selectedCall.keywords.map((kw, idx) => (
-                  <span key={idx} className="keyword-tag">{kw}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '15px', background: '#eff6ff', padding: '10px', borderRadius: '8px' }}>
-            <div className="info-label" style={{ color: '#1e40af' }}><Activity size={14}/> Diagnóstico IA en Vivo</div>
-            <div className="ai-diagnosis">
-              {selectedCall.aiResponse}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-              {selectedCall.score > 70 ? (
-                  <button style={{ flex: 1, background: '#ef4444', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>DESPACHAR UNIDAD</button>
-                ) : selectedCall.score > 30 ? (
-                  <button style={{ flex: 1, background: '#eab308', color: 'white', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>MANTENER EN ZONA GRIS</button>
-                ) : (
-                  <button style={{ flex: 1, background: '#cbd5e1', color: '#475569', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}>DESCARTAR</button>
-              )}
-          </div>
-        </div>
-
-        <div className="card" style={{ flexGrow: 1 }}>
-          <div className="transcript-box">
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase', position: 'sticky', top: 0 }}>Transcripción de Audio</div>
-              <div className="chat-bubble user">
-                <Users size={14} style={{ display: 'inline', marginRight: '5px' }} />
-                {selectedCall.transcript}
-              </div>
-          </div>
+          ))}
         </div>
       </div>
 
-      {/* 3. COLUMNA DERECHA: SIDEBAR (ZONA GRIS Y HERRAMIENTAS) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="card" style={{ background: '#fefce8', borderColor: '#fef08a' }}>
-            <h3 style={{ fontSize: '1rem', color: '#854d0e', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <AlertTriangle size={18} /> Zona Gris Activa
-            </h3>
-            <div style={{ fontSize: '0.85rem', color: '#a16207', marginBottom: '15px' }}>
-                3 llamadas en monitoreo silencioso.
-            </div>
-            {[1,2,3].map(i => (
-                <div key={i} style={{ background: 'white', padding: '10px', borderRadius: '8px', marginBottom: '10px', border: '1px solid #fef08a' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 'bold', color: '#475569' }}>618-22-00{i}</span>
-                      <span style={{ fontSize: '0.7rem', color: '#ca8a04', fontWeight: 'bold', animation: 'pulse 2s infinite' }}>ESCUCHANDO...</span>
-                  </div>
-                  <div className="action-row">
-                      <button className="icon-btn blue"><Headphones size={14}/> Escuchar</button>
-                      <button className="icon-btn red"><PhoneOff size={14}/> Colgar</button>
-                  </div>
-                </div>
-            ))}
-          </div>
+      {/* --- SECCIÓN INFERIOR --- */}
+      <div style={styles.bottomSection}>
+        
+        {/* IZQUIERDA: DETALLE DE LLAMADA (Intacto) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+           <div style={{ ...styles.cardBase, padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '20px', borderBottom: '1px solid #f1f5f9', marginBottom: '20px' }}>
+                 <div>
+                    <h2 style={{ margin: 0, fontSize: '2rem', fontWeight: '800', color: '#1e293b' }}>{selectedCall.phone}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', marginTop: '5px' }}>
+                       <MapPin size={18} /> {selectedCall.location}
+                    </div>
+                 </div>
+                 <ScoreGauge score={selectedCall.score} />
+              </div>
 
-          <div className="card">
-            <h3 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#1e293b', margin: '0 0 15px 0' }}>Herramientas</h3>
-            <button style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%', padding: '10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#475569', marginBottom: '10px', cursor: 'pointer' }}>
-                <PhoneOff size={16}/> Colgar Masivas
-            </button>
-            <button style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%', padding: '10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#475569', cursor: 'pointer' }}>
-                <Search size={16}/> Buscar Registro
-            </button>
-          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                 <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px' }}>
+                    <div style={styles.label}><Volume2 size={14}/> ANÁLISIS DE VOZ</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                       <AudioWave level={selectedCall.audioLevel} />
+                       <div style={{ fontWeight: 'bold', color: '#334155' }}>{selectedCall.voiceStatus}</div>
+                    </div>
+                 </div>
+                 <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px' }}>
+                    <div style={styles.label}><Tag size={14}/> PALABRAS CLAVE</div>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                       {selectedCall.keywords.map((k, i) => (
+                          <span key={i} style={{ background: 'white', border: '1px solid #e2e8f0', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', color: '#475569', fontWeight: '600' }}>{k}</span>
+                       ))}
+                    </div>
+                 </div>
+              </div>
+
+              <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '12px', borderLeft: '4px solid #3b82f6', marginBottom: '20px' }}>
+                 <div style={{ ...styles.label, color: '#1e40af' }}><Activity size={14}/> DIAGNÓSTICO IA EN TIEMPO REAL</div>
+                 <div style={{ color: '#1e3a8a', fontSize: '0.95rem', lineHeight: '1.5' }}>{selectedCall.aiResponse}</div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                 <button className="btn-hover" style={{ flex: 1, background: selectedCall.score > 70 ? '#ef4444' : '#eab308', color: 'white', border: 'none', padding: '14px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                    {selectedCall.score > 70 ? 'DESPACHAR UNIDAD (S.O.S)' : 'MANTENER EN OBSERVACIÓN'}
+                 </button>
+                 <button className="btn-hover" style={{ flex: 1, background: 'white', border: '2px solid #e2e8f0', color: '#64748b', padding: '14px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    DESCARTAR EVENTO
+                 </button>
+              </div>
+           </div>
+
+           <div style={{ ...styles.cardBase, padding: '20px', flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={styles.label}>TRANSCRIPCIÓN EN VIVO</div>
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', color: '#334155', fontStyle: 'italic', lineHeight: '1.6', flexGrow: 1 }}>
+                 "{selectedCall.transcript}"
+              </div>
+           </div>
+        </div>
+
+        {/* DERECHA: ZONA GRIS Y HERRAMIENTAS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+           
+           {/* ZONA GRIS (Color Gris - Neutral) */}
+           {/* Cambio de fondo amarillo (#fffbeb) a gris muy claro (#f9fafb) y bordes grises */}
+           <div style={{ ...styles.cardBase, background: '#f9fafb', border: '1px solid #e5e7eb' }}>
+              <div style={{ padding: '20px 20px 10px 20px' }}>
+                 <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 'bold', color: '#374151', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {/* Icono Gris con Pulso Gris */}
+                    <div className="pulse-monitoring" style={{ background: '#e5e7eb', padding: '6px', borderRadius: '50%' }}>
+                        <Radio size={16} color="#4b5563"/>
+                    </div>
+                    Zona Gris Activa
+                 </h3>
+                 <p style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '5px' }}>3 llamadas en monitoreo silencioso.</p>
+              </div>
+
+              <div style={{ padding: '0 20px 20px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                 {[1, 2, 3].map((n, i) => (
+                    <div key={n} className="btn-hover" style={{ background: 'white', padding: '12px', borderRadius: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: '10px', border: '1px solid #f3f4f6' }}>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 'bold', color: '#475569' }}>618-22-00{n}</span>
+                          {/* Mini visualizador de audio GRIS */}
+                          <div style={{ display: 'flex', gap: '2px', alignItems: 'flex-end', height: '12px' }}>
+                             <div className="wave-bar-gray" style={{ animationDelay: `${i*0.1}s` }}></div>
+                             <div className="wave-bar-gray" style={{ animationDelay: `${i*0.2}s` }}></div>
+                             <div className="wave-bar-gray" style={{ animationDelay: `${i*0.3}s` }}></div>
+                          </div>
+                       </div>
+                       <div style={{ display: 'flex', gap: '8px' }}>
+                          <button style={{ ...styles.actionBtn(), background: '#f3f4f6', color: '#4b5563', padding: '6px', fontSize: '0.75rem' }}><Headphones size={14}/> Monitor</button>
+                          <button style={{ ...styles.actionBtn(), background: '#fef2f2', color: '#ef4444', padding: '6px', fontSize: '0.75rem' }}><PhoneOff size={14}/> Cortar</button>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+           </div>
+
+           {/* HERRAMIENTAS */}
+           <div style={{ ...styles.cardBase, padding: '20px' }}>
+              <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', fontWeight: 'bold', color: '#1e293b' }}>Herramientas Rápidas</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                 <button className="btn-hover" style={{ ...styles.actionBtn(), border: '1px solid #e2e8f0', background: 'white', justifyContent: 'flex-start', padding: '12px' }}>
+                    <PhoneOff size={16}/> Colgar Masivas (Zona Gris)
+                 </button>
+                 <button className="btn-hover" style={{ ...styles.actionBtn(), border: '1px solid #e2e8f0', background: 'white', justifyContent: 'flex-start', padding: '12px' }}>
+                    <Search size={16}/> Búsqueda Avanzada
+                 </button>
+              </div>
+           </div>
+
+        </div>
       </div>
     </div>
   );
