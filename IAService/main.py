@@ -1,6 +1,11 @@
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Form
-from faster_whisper import WhisperModel
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException, Form, WebSocket, WebSocketDisconnect
+import requests
+import httpx
+from dotenv import load_dotenv
+
+load_dotenv()  # Cargar variables de entorno (para GROQ_API_KEY)
+
 from pydub import AudioSegment
 from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 import torch
@@ -12,6 +17,8 @@ import shutil
 import os
 import time
 import uuid
+import wave
+import asyncio
 
 # ==========================================
 # CONFIGURACIÓN E INICIALIZACIÓN
@@ -21,15 +28,13 @@ print("--- INICIANDO SERVIDOR DE IA (3 MODELOS INDEPENDIENTES) ---")
 device_str = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Dispositivo detectado: {device_str}")
 
-# --- 1. WHISPER (Transcripción) ---
-WHISPER_MODEL_SIZE = "base"
-print(f"\n[1/3] Cargando Whisper ({WHISPER_MODEL_SIZE})...")
-try:
-    whisper_model = WhisperModel(WHISPER_MODEL_SIZE, device=device_str, compute_type="int8", download_root="./models_whisper")
-    print("✅ Whisper Listo.")
-except Exception as e:
-    print(f"❌ Error Whisper: {e}")
-    exit(1)
+# --- 1. WHISPER (Transcripción con GROQ API) ---
+print(f"\n[1/3] Configurando Whisper via Groq API...")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    print("⚠️ ADVERTENCIA: GROQ_API_KEY no encontrada. Transcripción no funcionará correctamente.")
+else:
+    print("✅ Groq API Configurada.")
 
 # --- 2. EMOCIONES (Voz Humana) ---
 print("\n[2/3] Cargando modelo de Emociones...")
@@ -174,9 +179,36 @@ def transcribe_audio(file: UploadFile = File(...), language: str = Query(None)):
         with open(temp_path, "wb") as f: shutil.copyfileobj(file.file, f)
         wav_path = convert_to_wav_16k(temp_path)
         
-        segments, _ = whisper_model.transcribe(wav_path, language=language, beam_size=1)
-        text = " ".join([s.text for s in segments]).strip()
-        return {"texto": text}
+        if not GROQ_API_KEY:
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY no está configurada en el servidor.")
+            
+        url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}"
+        }
+        
+        with open(wav_path, "rb") as audio_file:
+            files = {
+                "file": (os.path.basename(wav_path), audio_file, "audio/wav")
+            }
+            data = {
+                "model": "whisper-large-v3-turbo",
+            }
+            if language:
+                data["language"] = language
+                
+            response = requests.post(url, headers=headers, files=files, data=data)
+            
+        if response.status_code == 200:
+            result = response.json()
+            return {"texto": result.get("text", "").strip()}
+        else:
+            raise HTTPException(status_code=response.status_code, detail=f"Error Groq API: {response.text}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if os.path.exists(temp_path): os.remove(temp_path)
         if wav_path and os.path.exists(wav_path) and wav_path != temp_path: os.remove(wav_path)
@@ -234,9 +266,141 @@ def analyze_background_noise(file: UploadFile = File(...)):
         }
     except Exception as e:
         return {"error": str(e)}
-    finally:
-        if os.path.exists(temp_path): os.remove(temp_path)
-        if wav_path and os.path.exists(wav_path) and wav_path != temp_path: os.remove(wav_path)
+# ==========================================
+# ENDPOINT DE WEBSOCKETS (VAD y STREAMING A GROQ)
+# ==========================================
+
+# Sesión global asincrónica para conexión Keep-Alive (Ahorra handshake TLS por cada audio)
+groq_client = httpx.AsyncClient(timeout=10.0)
+
+async def transcribe_buffer_to_groq(pcm_bytes, sample_rate):
+    """Convierte PCM 16-bit a WAV en memoria y hace la petición a Groq (Sin usar disco ni bloques sincrónicos)."""
+    if not GROQ_API_KEY: 
+        return None
+        
+    try:
+        import io
+        wav_io = io.BytesIO()
+        with wave.open(wav_io, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2) # 16 bits = 2 bytes
+            wf.setframerate(sample_rate)
+            wf.writeframes(pcm_bytes)
+        
+        wav_data = wav_io.getvalue()
+            
+        url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        
+        # Petición 100% asíncrona real
+        try:
+            files = {"file": ("stream.wav", wav_data, "audio/wav")}
+            data = {"model": "whisper-large-v3-turbo", "language": "es", "response_format": "json"}
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+            
+            response = await groq_client.post(url, headers=headers, files=files, data=data)
+            
+            if response.status_code == 200:
+                ret_json = response.json()
+                return ret_json.get("text", "").strip()
+            else:
+                print(f"Error en Groq API ({response.status_code}): {response.text}")
+                return None
+        except Exception as req_e:
+            print(f"Error request asíncrono Groq: {req_e}")
+            return None
+                
+    except Exception as e:
+        print(f"Error en transcribe_buffer_to_groq: {e}")
+        return None
+
+@app.websocket("/trans_stream")
+async def websocket_transcribe(websocket: WebSocket):
+    await websocket.accept()
+    print("[WS VAD] Conexión abierta para streaming VAD a Groq.")
+    
+    # Parámetros esperados desde Twilio transformados por expressServer
+    SAMPLE_RATE = 8000
+    BYTES_PER_SAMPLE = 2  # 16-bit PCM
+    
+    # Afinación del Detector de Silencio (VAD simple por RMS)
+    RMS_THRESHOLD = 500       # Si el volumen cae por debajo de esto, se considera silencio. (Ajustar si es muy sensible)
+    SILENCE_TIME_LIMIT = 0.5  # Tiempo en segundos al cual enviamos la frase a Groq y la cortamos. REDUCIDO PARA MAYOR VELOCIDAD
+    MIN_SPEECH_TIME = 0.3     # Ignorar interjecciones cortas o ruidos estáticos menores a este tiempo.
+    
+    buffer = bytearray()
+    speech_buffer = bytearray()
+    
+    is_speaking = False
+    silence_duration = 0.0
+    speech_duration = 0.0
+    
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            buffer.extend(data)
+            
+            # Extraemos en trozos lógicos de 100ms
+            chunk_size = int(SAMPLE_RATE * BYTES_PER_SAMPLE * 0.1)
+            
+            while len(buffer) >= chunk_size:
+                chunk = buffer[:chunk_size]
+                buffer = buffer[chunk_size:]
+                
+                audio_np = np.frombuffer(chunk, dtype=np.int16)
+                if len(audio_np) == 0: continue
+                
+                # Calcular RMS para este chunk (Volumen)
+                audio_np_float = audio_np.astype(np.float32)
+                rms = np.sqrt(np.mean(audio_np_float**2))
+                
+                if rms > RMS_THRESHOLD:
+                    # Usuario está hablando activo
+                    if not is_speaking:
+                        print("[WS VAD] Habla detectada, iniciando captura...")
+                    is_speaking = True
+                    silence_duration = 0.0
+                    speech_duration += 0.1
+                    speech_buffer.extend(chunk)
+                else:
+                    # Usuario en pausa o silencio
+                    if is_speaking:
+                        silence_duration += 0.1
+                        speech_buffer.extend(chunk) # Dejamos el silencio natural en la transcripción
+                        speech_duration += 0.1
+                        
+                        # Si estuvo en pausa por 1 segundo, enviaremos la oración completa.
+                        if silence_duration >= SILENCE_TIME_LIMIT:
+                            
+                            # Si de verdad habló una oración larga y no solo hizo un ruidito
+                            if speech_duration >= MIN_SPEECH_TIME:
+                                print(f"[WS VAD] Fin de intervención ({speech_duration:.1f}s). Transcribiendo con Groq...")
+                                async def process_and_send(buf):
+                                    start_time = time.time()
+                                    text = await transcribe_buffer_to_groq(buf, SAMPLE_RATE)
+                                    elapsed = time.time() - start_time
+                                    print(f"[WS VAD] Groq tardó {elapsed:.2f}s")
+                                    
+                                    if text:
+                                        print(f"[WS VAD] Transcrito exitoso: {text}")
+                                        try:
+                                            await websocket.send_json({"type": "transcription", "text": text})
+                                        except Exception as e:
+                                            print(f"[WS VAD] Error enviando evento a WS: {e}")
+                                    else:
+                                        print("[WS VAD] La transcripción quedó vacía o falló.")
+                                    
+                                asyncio.create_task(process_and_send(bytearray(speech_buffer)))
+                            
+                            # Reset de tiempos para la siguiente frase
+                            is_speaking = False
+                            silence_duration = 0.0
+                            speech_duration = 0.0
+                            speech_buffer.clear()
+                            
+    except WebSocketDisconnect:
+        print("[WS VAD] Conexión de streaming cerrada por el cliente.")
+    except Exception as e:
+        print(f"[WS VAD] Error crítico en stream: {e}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

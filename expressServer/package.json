@@ -20,7 +20,8 @@
     "mu-law": "^0.0.1",
     "openai": "^6.9.1",
     "twilio": "^5.10.4",
-    "wavefile": "^11.0.0"
+    "wavefile": "^11.0.0",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "install": "^0.13.0",

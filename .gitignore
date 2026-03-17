@@ -38,6 +38,14 @@ IAService/build/
 IAService/dist/
 IAService/*.egg-info/
 
+# Modelos pesados descartados
+IAService/models_emotion/
+IAService/models_env/
+IAService/models_whisper/
+
+# Otros
+IAService/temp_*.wav
+IAService/*.wav
 # React (dashboard)
 dashboard/dist/
 dashboard/build/

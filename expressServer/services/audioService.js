@@ -21,6 +21,15 @@ for (let i = 0; i < 256; i++) {
     muLawToPcmMap[i] = sign * (sample - 132);
 }
 
+function getPCMFromMuLaw(mulawBuffer) {
+    const pcmBuffer = Buffer.alloc(mulawBuffer.length * 2);
+    for (let i = 0; i < mulawBuffer.length; i++) {
+        const pcmVal = muLawToPcmMap[mulawBuffer[i]];
+        pcmBuffer.writeInt16LE(pcmVal, i * 2);
+    }
+    return pcmBuffer;
+}
+
 /**
  * Función optimizada para guardar WAV claro
  */
@@ -70,5 +79,6 @@ function saveWavFile(mulawBuffer, filePath) {
 
 module.exports = {
     saveWavFile,
+    getPCMFromMuLaw,
     RECORDINGS_DIR
 };

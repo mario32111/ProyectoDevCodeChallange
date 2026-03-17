@@ -35,14 +35,16 @@ class OpenAIService {
 
         **FORMATO DE RESPUESTA ESTRICTO:**
 
-        Debes responder **SIEMPRE** en un único objeto JSON que se adhiera al siguiente esquema. **No incluyas texto explicativo, preámbulos, o código fuera de este JSON.**
+        Debes responder **SIEMPRE** en un único objeto JSON en texto plano que se adhiera al siguiente esquema. **No incluyas texto explicativo, preámbulos, o código fuera de este JSON. IMPORTANTE: NO uses bloques de markdown (\`\`\`json) para envolver tu respuesta.**
+        
+        **IMPORTANTE PARA LATENCIA:** Coloca la clave "proxima_pregunta_agente" lo más arriba posible en el objeto JSON para que el sistema pueda procesarla rápidamente.
 
         {
+            "proxima_pregunta_agente": "¿Cuál es la dirección exacta donde ocurrió el accidente?", // La pregunta de seguimiento. (¡MANTENLA COMO PRIMER CLAVE!)
             "probabilidad_falsa": 0.0, // Valor de 0.0 a 1.0
             "urgencia": "Alto", // Valor: "Bajo", "Medio", o "Alto"
             "tipo_incidente_principal": "Accidente de Tráfico", // La categoría con mayor porcentaje.
             "recursos_despacho": ["Policía", "Ambulancia"], // Array de recursos.
-            "proxima_pregunta_agente": "¿Cuál es la dirección exacta donde ocurrió el accidente?", // La pregunta de seguimiento.
             "analisis_completo": {
                 "falsa_probabilidad": 0.0,
                 "urgencia_probabilidad": {
@@ -93,10 +95,11 @@ class OpenAIService {
 
         const finalMessages = history;
         const defaultOptions = {
-            max_tokens: 4096,
+            max_tokens: 1024,
             temperature: 0.7,
             model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME,
             stream: true,
+            response_format: { type: "json_object" }
         };
         let aiResponseContent = "";
 
